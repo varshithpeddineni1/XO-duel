@@ -21,6 +21,11 @@ describe('resolveInitialTheme', () => {
   it('ignores a garbage stored value and falls back to the OS preference', () => {
     expect(resolveInitialTheme('not-a-theme', true)).toBe('dark');
   });
+
+  it('treats an empty stored value the same as no stored value', () => {
+    expect(resolveInitialTheme('', true)).toBe('dark');
+    expect(resolveInitialTheme('', false)).toBe('light');
+  });
 });
 
 describe('toggleTheme', () => {

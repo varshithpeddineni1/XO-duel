@@ -2,6 +2,8 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    // 'node' is correct while the only unit-tested file (theme.ts) is DOM-free. Switch to
+    // 'jsdom' once component tests are added (Phase 2's Board/Cell/etc.).
     environment: 'node',
     coverage: {
       provider: 'v8',

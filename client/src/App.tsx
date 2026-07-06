@@ -3,14 +3,18 @@ import { resolveInitialTheme, toggleTheme, THEME_STORAGE_KEY, type Theme } from 
 
 // Minimal placeholder — not one of the 11 real screens (Phase 2+). Exists so the design
 // tokens are visibly wired up and the Playwright smoke test has something real to check.
+// Spacing/sizing below is hardcoded rather than tokenized (unlike color/font/radius, which
+// all come from tokens.css) since this component is deleted wholesale in Phase 2 — not a
+// pattern to copy into a real screen.
 export function App() {
-  const [theme, setTheme] = useState<Theme>('dark');
-
-  useEffect(() => {
-    const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setTheme(resolveInitialTheme(stored, prefersDark));
-  }, []);
+  // Lazy initializer so the correct theme is picked before the first paint (no dark-theme
+  // flash while an effect runs).
+  const [theme, setTheme] = useState<Theme>(() =>
+    resolveInitialTheme(
+      localStorage.getItem(THEME_STORAGE_KEY),
+      window.matchMedia('(prefers-color-scheme: dark)').matches,
+    ),
+  );
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
