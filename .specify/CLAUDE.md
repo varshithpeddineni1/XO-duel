@@ -70,9 +70,28 @@ docs/     runbook, ADRs
 > are still stubbed, and which Playwright test is expected to still fail, if
 > any. Do not leave this paragraph describing a stale state.
 
-Pre-implementation. Only the spec, rules, and this agent guidance exist so
-far. The first build milestones (per the spec's suggested build order) are:
-Postgres schema + migrations, pure game logic (win/draw detection + minimax),
-and the core REST API (session, account register/login). Real-time
-Socket.io play, the frontend, friends/leaderboards, and the admin dashboard
-come after.
+**Phase 1 (foundations) landed.** npm workspaces (`server`, `client`, `e2e`) with
+package.json/tsconfig per workspace, shared root ESLint (flat config) + Prettier, and
+`.env.example`. `server/src/domain/gameLogic.ts` (`checkWinner`, `WIN_LINES`) and
+`server/src/domain/minimax.ts` (`minimax` with alpha-beta, `getAiMove` for
+easy/medium/hard/impossible) are ported from the design prototype, pure, and unit-tested
+(19 tests, ~96% coverage) including an exhaustive proof that `impossible` never loses
+(TEST-3). The initial migration (`server/migrations/..._initial-schema.js`) creates
+`players`, `friendships`, `games`, `game_players`, `moves`, `events`, and the
+connect-pg-simple `session` table with the indexes from the implementation plan; verified
+up/down in CI against a Postgres service container (no local Postgres needed yet).
+`client/src/styles/tokens.css` has the full OKLCH token set (light/dark via
+`[data-theme]`, ARC-3a) extracted from `.specify/XO Duel.html`, plus a **minimal
+placeholder** `App.tsx`/`theme.ts` (not a real screen) so the Playwright smoke suite and
+CI have something real to exercise. `server/src/index.ts` is a `GET /api/health` stub
+only — no game routes yet. `ci.yml` (lint, typecheck, test+coverage, migration check,
+Playwright e2e, secret scan) and `pr-review.yml` (8-layer AI review via
+`scripts/pr-review.mjs`) are both wired up and green.
+
+**Still stubbed / not started:** all 11 real screens and their shared components (Board,
+Cell, ModeButton, DifficultyCard, ResultBanner, HistoryRow, LeaderboardRow, BottomNav,
+ThemeToggle, RematchButton), every REST endpoint beyond `/api/health`, all Socket.io
+events, accounts/auth, friends, leaderboards, and the admin dashboard. No Playwright test
+currently expects any of that to exist — the smoke spec only covers the placeholder page.
+Next up per the suggested build order: Phase 2 (local 2-player + AI opponent, end to end,
+server-authoritative per ARC-5).

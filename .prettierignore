@@ -1,0 +1,9 @@
+dist/
+coverage/
+node_modules/
+playwright-report/
+test-results/
+package-lock.json
+
+# Pre-existing docs/design source, not owned by this scaffold — left as-is.
+.specify/
