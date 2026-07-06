@@ -1,0 +1,145 @@
+/*
+ * Design tokens extracted from the Claude Design prototype (.specify/XO Duel.html).
+ * Single styling source (ARC-3) — components read colors, fonts, radii, and shadow only
+ * from these custom properties, never hard-coded values.
+ *
+ * Theming (ARC-3a): the mockup's `[data-xo-theme]` attribute is renamed to `[data-theme]`
+ * here to match rules.md's ARC-3a exactly. Cascade order below matters: the OS-preference
+ * media query and the explicit `[data-theme]` overrides all share selector specificity
+ * (0,1,0), so later-in-source wins — an explicit `[data-theme]` (once main.tsx sets it from
+ * localStorage or first-visit OS detection) always beats the `prefers-color-scheme`
+ * fallback used for first paint before JS runs.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --font-body: 'Manrope', sans-serif;
+  --font-display: 'Space Grotesk', sans-serif;
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-full: 999px;
+
+  /* Dark is the baseline default (matches the mockup's default theme). */
+  --backdrop: oklch(0.12 0.02 250);
+  --bg: oklch(0.16 0.02 250);
+  --surface: oklch(0.205 0.018 250);
+  --surface-raised: oklch(0.25 0.018 250);
+  --border: oklch(0.34 0.02 250 / 0.55);
+  --border-strong: oklch(0.42 0.02 250);
+  --fg: oklch(0.96 0.01 250);
+  --fg-muted: oklch(0.72 0.02 250);
+  --fg-faint: oklch(0.52 0.02 250);
+  --accent: oklch(0.78 0.17 165);
+  --accent-fg: oklch(0.15 0.03 165);
+  --accent-soft: oklch(0.78 0.17 165 / 0.16);
+  --x-color: oklch(0.78 0.17 165);
+  --x-soft: oklch(0.78 0.17 165 / 0.16);
+  --o-color: oklch(0.72 0.19 25);
+  --o-soft: oklch(0.72 0.19 25 / 0.16);
+  --success: oklch(0.76 0.17 150);
+  --success-soft: oklch(0.76 0.17 150 / 0.16);
+  --danger: oklch(0.68 0.19 22);
+  --danger-soft: oklch(0.68 0.19 22 / 0.16);
+  --warning: oklch(0.82 0.15 85);
+  --warning-soft: oklch(0.82 0.15 85 / 0.16);
+  --shadow: 0 24px 70px oklch(0 0 0 / 0.5);
+  --overlay: oklch(0.08 0.02 250 / 0.6);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --backdrop: oklch(0.9 0.006 250);
+    --bg: oklch(0.985 0.004 250);
+    --surface: oklch(1 0 0);
+    --surface-raised: oklch(0.965 0.005 250);
+    --border: oklch(0.88 0.008 250);
+    --border-strong: oklch(0.8 0.01 250);
+    --fg: oklch(0.2 0.02 250);
+    --fg-muted: oklch(0.46 0.02 250);
+    --fg-faint: oklch(0.62 0.02 250);
+    --accent: oklch(0.58 0.15 165);
+    --accent-fg: oklch(0.99 0.005 165);
+    --accent-soft: oklch(0.58 0.15 165 / 0.12);
+    --x-color: oklch(0.53 0.15 165);
+    --x-soft: oklch(0.53 0.15 165 / 0.12);
+    --o-color: oklch(0.58 0.18 25);
+    --o-soft: oklch(0.58 0.18 25 / 0.12);
+    --success: oklch(0.55 0.15 150);
+    --success-soft: oklch(0.55 0.15 150 / 0.12);
+    --danger: oklch(0.56 0.19 22);
+    --danger-soft: oklch(0.56 0.19 22 / 0.12);
+    --warning: oklch(0.66 0.15 80);
+    --warning-soft: oklch(0.66 0.15 80 / 0.12);
+    --shadow: 0 24px 60px oklch(0.2 0.02 250 / 0.14);
+    --overlay: oklch(0.3 0.02 250 / 0.35);
+  }
+}
+
+[data-theme='dark'] {
+  --backdrop: oklch(0.12 0.02 250);
+  --bg: oklch(0.16 0.02 250);
+  --surface: oklch(0.205 0.018 250);
+  --surface-raised: oklch(0.25 0.018 250);
+  --border: oklch(0.34 0.02 250 / 0.55);
+  --border-strong: oklch(0.42 0.02 250);
+  --fg: oklch(0.96 0.01 250);
+  --fg-muted: oklch(0.72 0.02 250);
+  --fg-faint: oklch(0.52 0.02 250);
+  --accent: oklch(0.78 0.17 165);
+  --accent-fg: oklch(0.15 0.03 165);
+  --accent-soft: oklch(0.78 0.17 165 / 0.16);
+  --x-color: oklch(0.78 0.17 165);
+  --x-soft: oklch(0.78 0.17 165 / 0.16);
+  --o-color: oklch(0.72 0.19 25);
+  --o-soft: oklch(0.72 0.19 25 / 0.16);
+  --success: oklch(0.76 0.17 150);
+  --success-soft: oklch(0.76 0.17 150 / 0.16);
+  --danger: oklch(0.68 0.19 22);
+  --danger-soft: oklch(0.68 0.19 22 / 0.16);
+  --warning: oklch(0.82 0.15 85);
+  --warning-soft: oklch(0.82 0.15 85 / 0.16);
+  --shadow: 0 24px 70px oklch(0 0 0 / 0.5);
+  --overlay: oklch(0.08 0.02 250 / 0.6);
+}
+
+[data-theme='light'] {
+  --backdrop: oklch(0.9 0.006 250);
+  --bg: oklch(0.985 0.004 250);
+  --surface: oklch(1 0 0);
+  --surface-raised: oklch(0.965 0.005 250);
+  --border: oklch(0.88 0.008 250);
+  --border-strong: oklch(0.8 0.01 250);
+  --fg: oklch(0.2 0.02 250);
+  --fg-muted: oklch(0.46 0.02 250);
+  --fg-faint: oklch(0.62 0.02 250);
+  --accent: oklch(0.58 0.15 165);
+  --accent-fg: oklch(0.99 0.005 165);
+  --accent-soft: oklch(0.58 0.15 165 / 0.12);
+  --x-color: oklch(0.53 0.15 165);
+  --x-soft: oklch(0.53 0.15 165 / 0.12);
+  --o-color: oklch(0.58 0.18 25);
+  --o-soft: oklch(0.58 0.18 25 / 0.12);
+  --success: oklch(0.55 0.15 150);
+  --success-soft: oklch(0.55 0.15 150 / 0.12);
+  --danger: oklch(0.56 0.19 22);
+  --danger-soft: oklch(0.56 0.19 22 / 0.12);
+  --warning: oklch(0.66 0.15 80);
+  --warning-soft: oklch(0.66 0.15 80 / 0.12);
+  --shadow: 0 24px 60px oklch(0.2 0.02 250 / 0.14);
+  --overlay: oklch(0.3 0.02 250 / 0.35);
+}
+
+body {
+  margin: 0;
+  background: var(--backdrop);
+  color: var(--fg);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
