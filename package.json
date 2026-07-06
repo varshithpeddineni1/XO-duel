@@ -14,7 +14,7 @@
   "scripts": {
     "migrate": "npm run migrate:up --workspace server",
     "migrate:down": "npm run migrate:down --workspace server",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test --workspace server --workspace client",
     "lint": "eslint .",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
