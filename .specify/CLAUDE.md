@@ -215,7 +215,43 @@ below would have stayed permanently empty for every online game.
   `admin.spec.ts`. As with every phase so far, I could not run the integration suites or
   e2e specs locally (no Postgres/Docker in this environment) — CI is the real evidence.
 
-**Still stubbed / not started:** nothing from the spec's core v1 feature list — Phase 6
-(deploy) is what's left. Two known, deliberately-scoped-out items remain: no admin
-moderation (suspend/ban — explicitly a future phase per SEC-10), and no nickname-editing
-UI for guests. Next up per the suggested build order: Phase 6 (deploy).
+**Phase 6 (deploy) landed — tooling only, live deployment is pending on real
+infrastructure.** Per the user's explicit decision, the backend deploy mechanism (the
+spec's §11 open decision) is a **manual pull + PM2-reload script**, not GitHub Actions SSH
+automation — deliberately, to avoid putting VPS SSH keys in GitHub secrets. This phase is
+entirely config/scripts/docs; no application code changed.
+
+- `deploy/setup-vps.sh` — one-time Ubuntu 24.04 bootstrap (Node 20.x via NodeSource,
+  PostgreSQL 18 via the PGDG apt repo since Ubuntu 24.04's own repos don't carry it, Nginx,
+  PM2, `ufw` firewall allowing only 22/80/443, the `xo_duel` Postgres role/database, repo
+  clone to `/opt/xo-duel`).
+- `deploy/nginx.conf` — reverse-proxy site config; TLS via a Cloudflare Origin Certificate
+  ("Full (strict)" mode — stricter than Cloudflare's "Flexible" mode, satisfies SEC-7's "no
+  plaintext to the origin" more literally); WebSocket upgrade headers (without them,
+  Socket.io's connections fail to upgrade — API-8).
+- `deploy/ecosystem.config.cjs` — PM2 process file; holds no secrets, `cwd` is derived from
+  the file's own location (`__dirname`) so it resolves correctly regardless of where
+  `deploy.sh` happens to invoke `pm2` from.
+- `deploy/deploy.sh` — the actual redeploy script a human runs by hand after a merge: pull,
+  `npm ci`, build, migrate, `pm2 startOrReload --update-env`, then checks `/api/health`
+  and fails loudly if it doesn't respond.
+- `docs/runbook.md` — the spec's named deliverable: one-time setup (VPS → Cloudflare →
+  origin cert → Nginx → `.env` → PM2 → Vercel, in order, since later steps depend on
+  earlier ones), routine deploy, restart, logs, rollback (with the migration-rollback
+  caveat — `deploy.sh`'s `npm run migrate` only ever applies new migrations forward,
+  checking out an older commit doesn't undo one a bad release already applied), and
+  troubleshooting.
+
+**What's still genuinely pending, and can't be done from here:** provisioning the actual
+Hetzner VPS, registering a domain, creating the Cloudflare/Vercel projects, and the spec's
+own Phase 6 verify line — a live domain reachable off-network, a full online game played
+between two real devices through the deployed stack, health check green. None of that is
+possible without real accounts and money the user has to provide; the runbook is written
+so that once they exist, standing it up is following numbered steps, not figuring things
+out from scratch.
+
+**Still stubbed / not started (out of v1 scope on purpose):** admin moderation
+(suspend/ban — explicitly a future phase per SEC-10), nickname-editing UI for guests,
+everything in the spec's §12 "Future phases" list (matchmaking queue, ELO rating,
+spectator mode/chat, PWA, tournaments). Every phase from the suggested build order is now
+built; what's left is standing up the infrastructure this phase's tooling targets.
