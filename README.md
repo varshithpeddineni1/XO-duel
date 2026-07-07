@@ -63,15 +63,15 @@ Open `http://localhost:5173` — a guest session starts automatically, no login 
 
 Run from the repo root unless noted:
 
-| Command | What it does |
-| --- | --- |
-| `npm run test` | Unit tests for `server` and `client` (Vitest). |
-| `npm run test:e2e` | Playwright end-to-end tests (`e2e` workspace). |
-| `npm run lint` | ESLint across the whole repo. |
-| `npm run typecheck` | TypeScript project-references check across workspaces. |
-| `npm run format` / `format:write` | Prettier check / auto-fix. |
-| `npm run migrate` / `migrate:down` | Apply / roll back the most recent DB migration. |
-| `npm run hash-admin -- '<passcode>'` | Generate an Argon2 hash for `ADMIN_PASSWORD_HASH`. |
+| Command                              | What it does                                           |
+| ------------------------------------ | ------------------------------------------------------ |
+| `npm run test`                       | Unit tests for `server` and `client` (Vitest).         |
+| `npm run test:e2e`                   | Playwright end-to-end tests (`e2e` workspace).         |
+| `npm run lint`                       | ESLint across the whole repo.                          |
+| `npm run typecheck`                  | TypeScript project-references check across workspaces. |
+| `npm run format` / `format:write`    | Prettier check / auto-fix.                             |
+| `npm run migrate` / `migrate:down`   | Apply / roll back the most recent DB migration.        |
+| `npm run hash-admin -- '<passcode>'` | Generate an Argon2 hash for `ADMIN_PASSWORD_HASH`.     |
 
 Server-only: `npm run test:integration --workspace server` (needs a real Postgres
 instance — see `server/vitest.integration.config.ts`).
