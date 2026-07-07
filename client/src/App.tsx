@@ -172,6 +172,22 @@ export function App() {
     return undefined;
   }, [onlineGame.game, onlineInviteCode]);
 
+  // Surfaces a join_game failure in the same banner every other error uses. Without this,
+  // a rejected join (expired/abandoned invite, bad code) failed completely silently: the
+  // socket still connects fine, the ack comes back { ok: false }, and the screen just sat
+  // on Home forever with nothing in the console. Only resets back to a clean state if the
+  // join never succeeded (`!onlineGame.game`) — a move-rejection error mid-game reuses this
+  // same onlineGame.error field and must only show the message, not abandon a live game.
+  useEffect(() => {
+    if (!onlineGame.error) return;
+    setError(onlineGame.error);
+    if (!onlineGame.game) {
+      setOnlineInviteCode(null);
+      clearJoinParam();
+      setMode(null);
+    }
+  }, [onlineGame.error, onlineGame.game]);
+
   const handleToggleTheme = () => {
     setTheme((current) => {
       const next = toggleTheme(current);

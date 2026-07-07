@@ -205,8 +205,18 @@ async function handleDisconnect(io: Server, socket: Socket) {
   const otherSid = room.sockets[winningMark];
 
   if (!otherSid) {
-    await abandonWaitingGame(room.gameId);
-    deleteRoom(room.gameId);
+    // Same grace period as a mid-game disconnect, not an instant abandon — without it,
+    // backgrounding the tab to actually send the invite link (mobile browsers commonly
+    // suspend a backgrounded tab's WebSocket) kills the room before the other device even
+    // gets a chance to join. tryReconnect already clears this timer if the creator comes
+    // back with their reconnectToken before it fires.
+    room.disconnectedMark = mark;
+    room.disconnectTimer = setTimeout(() => {
+      // Re-check at fire time: a genuine second player may have joined during the grace
+      // period, in which case the room is live now and must not be torn down.
+      if (room.sockets[winningMark]) return;
+      void abandonWaitingGame(room.gameId).then(() => deleteRoom(room.gameId));
+    }, env.disconnectGracePeriodMs);
     return;
   }
 
