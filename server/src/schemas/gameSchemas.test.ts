@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createGameSchema, gameIdParamSchema, makeMoveSchema } from './gameSchemas.js';
+import {
+  createGameSchema,
+  gameIdParamSchema,
+  inviteCodeSchema,
+  joinGameSchema,
+  makeMoveSchema,
+  socketMoveSchema,
+} from './gameSchemas.js';
 
 describe('createGameSchema', () => {
   it('accepts a local game', () => {
@@ -21,8 +28,12 @@ describe('createGameSchema', () => {
     expect(() => createGameSchema.parse({ mode: 'ai', aiDifficulty: 'nightmare' })).toThrow();
   });
 
+  it('accepts an online game', () => {
+    expect(createGameSchema.parse({ mode: 'online' })).toEqual({ mode: 'online' });
+  });
+
   it('rejects an unknown mode', () => {
-    expect(() => createGameSchema.parse({ mode: 'online' })).toThrow();
+    expect(() => createGameSchema.parse({ mode: 'tournament' })).toThrow();
   });
 });
 
@@ -59,5 +70,52 @@ describe('gameIdParamSchema', () => {
 
   it('rejects a negative id', () => {
     expect(() => gameIdParamSchema.parse('-1')).toThrow();
+  });
+});
+
+describe('inviteCodeSchema', () => {
+  it('accepts a well-formed code', () => {
+    expect(inviteCodeSchema.parse('XO-AB2C3')).toBe('XO-AB2C3');
+  });
+
+  it('rejects a code with ambiguous characters', () => {
+    expect(() => inviteCodeSchema.parse('XO-AB0I1')).toThrow();
+  });
+
+  it('rejects the wrong length', () => {
+    expect(() => inviteCodeSchema.parse('XO-AB2')).toThrow();
+  });
+
+  it('rejects a missing prefix', () => {
+    expect(() => inviteCodeSchema.parse('AB2C3')).toThrow();
+  });
+});
+
+describe('joinGameSchema', () => {
+  it('accepts an invite code with no reconnect token', () => {
+    expect(joinGameSchema.parse({ inviteCode: 'XO-AB2C3' })).toEqual({
+      inviteCode: 'XO-AB2C3',
+    });
+  });
+
+  it('accepts an invite code with a reconnect token', () => {
+    expect(joinGameSchema.parse({ inviteCode: 'XO-AB2C3', reconnectToken: 'abc' })).toEqual({
+      inviteCode: 'XO-AB2C3',
+      reconnectToken: 'abc',
+    });
+  });
+
+  it('rejects a malformed invite code', () => {
+    expect(() => joinGameSchema.parse({ inviteCode: 'nope' })).toThrow();
+  });
+});
+
+describe('socketMoveSchema', () => {
+  it('accepts a valid cell', () => {
+    expect(socketMoveSchema.parse({ cell: 8 })).toEqual({ cell: 8 });
+  });
+
+  it('rejects an out-of-range cell', () => {
+    expect(() => socketMoveSchema.parse({ cell: 9 })).toThrow();
   });
 });

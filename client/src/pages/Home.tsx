@@ -7,12 +7,19 @@ interface HomeProps {
   onToggleTheme: () => void;
   onSelectLocal: () => void;
   onSelectAi: () => void;
+  onSelectOnline: () => void;
 }
 
-// Home is the only screen with the logo header + theme toggle in Phase 2 — history,
+// Home is the only screen with the logo header + theme toggle so far — history,
 // leaderboard, and account (the mockup's other `showLogoHeader` screens) don't exist yet
 // (Phase 4/5), so there's no BottomNav to switch between them either.
-export function Home({ theme, onToggleTheme, onSelectLocal, onSelectAi }: HomeProps) {
+export function Home({
+  theme,
+  onToggleTheme,
+  onSelectLocal,
+  onSelectAi,
+  onSelectOnline,
+}: HomeProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <header
@@ -169,6 +176,45 @@ export function Home({ theme, onToggleTheme, onSelectLocal, onSelectAi }: HomePr
                     height: '7px',
                     borderRadius: '2px',
                     background: 'var(--accent)',
+                  }}
+                />
+              </div>
+            </div>
+          }
+        />
+        <ModeButton
+          onClick={onSelectOnline}
+          title="Online Multiplayer"
+          subtitle="Invite a friend by link or QR code"
+          icon={
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                borderRadius: '50%',
+                background: 'var(--o-soft)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <div
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  border: '2px solid var(--o-color)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: '7px',
+                    height: '7px',
+                    borderRadius: '50%',
+                    background: 'var(--o-color)',
                   }}
                 />
               </div>

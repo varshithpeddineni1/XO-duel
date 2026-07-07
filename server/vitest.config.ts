@@ -22,6 +22,7 @@ export default defineConfig({
         'src/routes/**',
         'src/services/**',
         'src/middleware/**',
+        'src/sockets/**',
         'src/openapi.ts',
       ],
       thresholds: {

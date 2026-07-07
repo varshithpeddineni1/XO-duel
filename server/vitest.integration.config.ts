@@ -6,6 +6,8 @@ export default defineConfig({
     include: ['src/**/*.integration.test.ts'],
     // Sequential: tests share one Postgres and don't isolate schemas per test file.
     fileParallelism: false,
-    env: { NODE_ENV: 'test' },
+    // Short grace period so the disconnect/forfeit test doesn't wait out the real 30s
+    // production default.
+    env: { NODE_ENV: 'test', DISCONNECT_GRACE_PERIOD_MS: '300' },
   },
 });

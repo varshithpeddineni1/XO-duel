@@ -18,6 +18,7 @@ export default defineConfig({
         'src/pages/**',
         'src/components/**',
         'src/api/**',
+        'src/hooks/**',
       ],
       thresholds: {
         lines: 80,

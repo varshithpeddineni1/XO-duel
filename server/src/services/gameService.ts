@@ -5,18 +5,25 @@ import type { Pool, PoolClient } from 'pg';
 import { getPool } from '../db/pool.js';
 import { boardFromMoves, type MoveRecord } from '../domain/board.js';
 import { checkWinner, type Board, type Mark, type WinLine } from '../domain/gameLogic.js';
+import { generateInviteCode } from '../domain/inviteCode.js';
 import { getAiMove } from '../domain/minimax.js';
-import { GameNotFoundError, GameNotInProgressError, IllegalMoveError } from '../lib/errors.js';
+import {
+  GameNotFoundError,
+  GameNotInProgressError,
+  GameNotJoinableError,
+  IllegalMoveError,
+} from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import type { CreateGameInput, DifficultyInput } from '../schemas/gameSchemas.js';
 
-export type GameMode = 'local' | 'ai';
-export type GameStatus = 'in_progress' | 'complete';
+export type GameMode = 'local' | 'ai' | 'online';
+export type GameStatus = 'waiting' | 'in_progress' | 'complete' | 'abandoned';
 
 export interface GameState {
   id: number;
   mode: GameMode;
   aiDifficulty: DifficultyInput | null;
+  inviteCode: string | null;
   board: Board;
   currentPlayer: Mark;
   status: GameStatus;
@@ -28,18 +35,30 @@ interface GameRow {
   id: number;
   mode: GameMode;
   ai_difficulty: DifficultyInput | null;
+  invite_code: string | null;
   status: GameStatus;
 }
 
 type Queryable = Pool | PoolClient;
 
+const GAME_ROW_COLUMNS = 'id, mode, ai_difficulty, invite_code, status';
+
 async function loadGameRow(db: Queryable, gameId: number): Promise<GameRow> {
-  const { rows } = await db.query<GameRow>(
-    'SELECT id, mode, ai_difficulty, status FROM games WHERE id = $1',
-    [gameId],
-  );
+  const { rows } = await db.query<GameRow>(`SELECT ${GAME_ROW_COLUMNS} FROM games WHERE id = $1`, [
+    gameId,
+  ]);
   const row = rows[0];
   if (!row) throw new GameNotFoundError(String(gameId));
+  return row;
+}
+
+async function loadGameRowByInviteCode(db: Queryable, inviteCode: string): Promise<GameRow> {
+  const { rows } = await db.query<GameRow>(
+    `SELECT ${GAME_ROW_COLUMNS} FROM games WHERE invite_code = $1`,
+    [inviteCode],
+  );
+  const row = rows[0];
+  if (!row) throw new GameNotFoundError(inviteCode);
   return row;
 }
 
@@ -59,6 +78,7 @@ function toGameState(row: GameRow, moves: MoveRecord[]): GameState {
     id: row.id,
     mode: row.mode,
     aiDifficulty: row.ai_difficulty,
+    inviteCode: row.invite_code,
     board,
     currentPlayer,
     status: row.status,
@@ -112,14 +132,16 @@ async function finalizeIfOver(
   return { ...state, status: 'complete' };
 }
 
-export async function createGame(input: CreateGameInput): Promise<GameState> {
+type LocalOrAiInput = Extract<CreateGameInput, { mode: 'local' } | { mode: 'ai' }>;
+
+export async function createGame(input: LocalOrAiInput): Promise<GameState> {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
     const aiDifficulty = input.mode === 'ai' ? input.aiDifficulty : null;
     const { rows } = await client.query<GameRow>(
       `INSERT INTO games (mode, ai_difficulty, status) VALUES ($1, $2, 'in_progress')
-       RETURNING id, mode, ai_difficulty, status`,
+       RETURNING ${GAME_ROW_COLUMNS}`,
       [input.mode, aiDifficulty],
     );
     const game = rows[0];
@@ -181,6 +203,182 @@ export async function submitMove(gameId: number, cell: number, mark: Mark): Prom
     await client.query('COMMIT');
     logger.info('move applied', { gameId, cell, mark, status: state.status });
     return state;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------------------
+// Online mode (Phase 3) — invite-link join flow. Move application and finalization above
+// (submitMove/finalizeIfOver) are reused as-is; a socket is simply one player, so the
+// server determines `mark` from which socket is bound to which player (server/src/sockets),
+// rather than trusting a client-supplied mark the way local mode's single session does.
+// ---------------------------------------------------------------------------------------
+
+async function generateUniqueInviteCode(client: PoolClient): Promise<string> {
+  const maxAttempts = 5;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const code = generateInviteCode();
+    const { rows } = await client.query('SELECT 1 FROM games WHERE invite_code = $1', [code]);
+    if (rows.length === 0) return code;
+  }
+  throw new Error(`failed to generate a unique invite code after ${maxAttempts} attempts`);
+}
+
+export async function createOnlineGame(): Promise<GameState> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const inviteCode = await generateUniqueInviteCode(client);
+    const { rows } = await client.query<GameRow>(
+      `INSERT INTO games (mode, status, invite_code) VALUES ('online', 'waiting', $1)
+       RETURNING ${GAME_ROW_COLUMNS}`,
+      [inviteCode],
+    );
+    const game = rows[0];
+    if (!game) throw new Error('game insert returned no row');
+    await client.query("INSERT INTO game_players (game_id, mark) VALUES ($1, 'X')", [game.id]);
+    await client.query('COMMIT');
+    logger.info('online game created', { gameId: game.id, inviteCode });
+    return toGameState(game, []);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Both players already share a live socket connection (mutual-accept rematch) — skip the
+// 'waiting' state entirely and seat both marks immediately.
+export async function createRematchGame(): Promise<GameState> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const inviteCode = await generateUniqueInviteCode(client);
+    const { rows } = await client.query<GameRow>(
+      `INSERT INTO games (mode, status, invite_code) VALUES ('online', 'in_progress', $1)
+       RETURNING ${GAME_ROW_COLUMNS}`,
+      [inviteCode],
+    );
+    const game = rows[0];
+    if (!game) throw new Error('game insert returned no row');
+    await client.query("INSERT INTO game_players (game_id, mark) VALUES ($1, 'X'), ($1, 'O')", [
+      game.id,
+    ]);
+    await client.query('COMMIT');
+    logger.info('online rematch game created', { gameId: game.id });
+    return toGameState(game, []);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function findGameByInviteCode(inviteCode: string): Promise<GameState> {
+  const pool = getPool();
+  const game = await loadGameRowByInviteCode(pool, inviteCode);
+  const moves = await loadMoves(pool, game.id);
+  return toGameState(game, moves);
+}
+
+// Second player joining via the invite link (API-5: single-use once two players are in).
+export async function joinOnlineGame(inviteCode: string): Promise<GameState> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<GameRow>(
+      `SELECT ${GAME_ROW_COLUMNS} FROM games WHERE invite_code = $1 FOR UPDATE`,
+      [inviteCode],
+    );
+    const game = rows[0];
+    if (!game) throw new GameNotFoundError(inviteCode);
+    if (game.status !== 'waiting') {
+      throw new GameNotJoinableError(inviteCode);
+    }
+
+    await client.query("INSERT INTO game_players (game_id, mark) VALUES ($1, 'O')", [game.id]);
+    await client.query("UPDATE games SET status = 'in_progress' WHERE id = $1", [game.id]);
+    await client.query('COMMIT');
+    logger.info('online game joined', { gameId: game.id });
+    return toGameState({ ...game, status: 'in_progress' }, []);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// A player's socket never reconnected within the grace period — the connected opponent
+// wins by forfeit. Tolerant of a race where the game already finished by other means
+// (e.g. the last move landed right as the disconnect timer fired).
+export async function forfeitGame(gameId: number, winningMark: Mark): Promise<GameState> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const game = await loadGameRow(client, gameId);
+    const moves = await loadMoves(client, gameId);
+
+    if (game.status !== 'in_progress') {
+      await client.query('COMMIT');
+      return toGameState(game, moves);
+    }
+
+    const losingMark: Mark = winningMark === 'X' ? 'O' : 'X';
+    await client.query("UPDATE games SET status = 'complete', completed_at = now() WHERE id = $1", [
+      gameId,
+    ]);
+    await client.query(
+      `UPDATE game_players SET outcome = CASE mark WHEN $2 THEN 'win' WHEN $3 THEN 'loss' END
+       WHERE game_id = $1`,
+      [gameId, winningMark, losingMark],
+    );
+    await client.query('INSERT INTO events (game_id, type, payload) VALUES ($1, $2, $3)', [
+      gameId,
+      'game_forfeited',
+      JSON.stringify({ winner: winningMark }),
+    ]);
+    await client.query('COMMIT');
+
+    logger.info('game forfeited', { gameId, winner: winningMark });
+    return {
+      ...toGameState(game, moves),
+      status: 'complete',
+      winner: winningMark,
+      winLine: null,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// The waiting creator's socket disconnected before anyone joined — nothing to forfeit to,
+// just mark the game abandoned so a stale invite code isn't left dangling as 'waiting'.
+export async function abandonWaitingGame(gameId: number): Promise<void> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const { rowCount } = await client.query(
+      "UPDATE games SET status = 'abandoned' WHERE id = $1 AND status = 'waiting'",
+      [gameId],
+    );
+    if (rowCount) {
+      await client.query('INSERT INTO events (game_id, type, payload) VALUES ($1, $2, $3)', [
+        gameId,
+        'game_abandoned',
+        '{}',
+      ]);
+    }
+    await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

@@ -23,6 +23,9 @@ export default defineConfig({
       env: {
         PORT: '3000',
         CLIENT_ORIGIN: 'http://localhost:4173',
+        // Short enough that the disconnect/forfeit e2e test doesn't wait out the real 30s
+        // production default.
+        DISCONNECT_GRACE_PERIOD_MS: '2000',
       },
     },
     {
@@ -33,6 +36,7 @@ export default defineConfig({
       timeout: 60_000,
       env: {
         VITE_API_URL: 'http://localhost:3000',
+        VITE_SOCKET_URL: 'http://localhost:3000',
       },
     },
   ],

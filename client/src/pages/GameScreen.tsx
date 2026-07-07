@@ -1,4 +1,4 @@
-import type { GameState } from '../api/games.js';
+import type { GameState, Mark } from '../api/games.js';
 import { Board } from '../components/Board.js';
 import { ScoreTile } from '../components/ScoreTile.js';
 
@@ -12,6 +12,9 @@ interface GameScreenProps {
   scoreRightValue: number;
   onCellClick: (cell: number) => void;
   onQuit: () => void;
+  opponentDisconnected?: boolean;
+  /** Which mark the local player controls. Only meaningful (and required) for online mode. */
+  role?: Mark | null;
 }
 
 export function GameScreen({
@@ -24,16 +27,38 @@ export function GameScreen({
   scoreRightValue,
   onCellClick,
   onQuit,
+  opponentDisconnected = false,
+  role = null,
 }: GameScreenProps) {
-  const turnText = turnTextFor(game);
+  const turnText = turnTextFor(game, role);
   const turnColor = game.currentPlayer === 'X' ? 'var(--x-color)' : 'var(--o-color)';
-  // Server is authoritative (ARC-5): the board is disabled during the AI's turn purely so
-  // the UI doesn't invite a click the server would reject anyway.
+  const localPlayersTurn =
+    game.mode === 'online' ? game.currentPlayer === role : game.currentPlayer === 'X';
+  // Server is authoritative (ARC-5): the board is disabled whenever it isn't the local
+  // player's turn to act, purely so the UI doesn't invite a click the server would reject
+  // anyway (vs AI's turn, or an online opponent who's currently disconnected).
   const boardDisabled =
-    game.status !== 'in_progress' || (game.mode === 'ai' && game.currentPlayer !== 'X');
+    game.status !== 'in_progress' ||
+    opponentDisconnected ||
+    (game.mode !== 'local' && !localPlayersTurn);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {opponentDisconnected && (
+        <div
+          role="status"
+          style={{
+            padding: '10px 20px',
+            background: 'var(--warning-soft)',
+            color: 'var(--warning)',
+            fontSize: '13px',
+            fontWeight: 600,
+            textAlign: 'center',
+          }}
+        >
+          Opponent disconnected — waiting for them to reconnect…
+        </div>
+      )}
       <header
         style={{
           display: 'flex',
@@ -98,10 +123,13 @@ export function GameScreen({
   );
 }
 
-function turnTextFor(game: GameState): string {
+function turnTextFor(game: GameState, role: Mark | null): string {
   if (game.status !== 'in_progress') return '';
   if (game.mode === 'local') {
     return game.currentPlayer === 'X' ? "Player 1's turn · X" : "Player 2's turn · O";
+  }
+  if (game.mode === 'online') {
+    return game.currentPlayer === role ? 'Your turn' : "Opponent's turn";
   }
   return game.currentPlayer === 'X' ? 'Your turn' : 'AI is thinking…';
 }
