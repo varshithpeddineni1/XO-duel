@@ -63,13 +63,6 @@ export function App() {
   // mirrors the 500ms "let the winning move render" pause the local/AI paths use below.
   useEffect(() => {
     const state = onlineGame.game;
-    console.log(
-      '[debug] effect fired',
-      state?.status,
-      state?.id,
-      'scoredRef=',
-      scoredOnlineGameId.current,
-    );
     if (!onlineInviteCode || !state) return undefined;
 
     if (state.status === 'waiting') {
@@ -77,7 +70,12 @@ export function App() {
       return undefined;
     }
     if (state.status === 'in_progress') {
-      setScreen((s) => (s === 'result' ? s : 'board'));
+      // Unconditional: a rematch produces a new game, also 'in_progress', while the screen
+      // is still showing the *previous* game's result — it must transition to the board
+      // regardless. There's no legitimate case where an 'in_progress' update should leave
+      // the result screen showing (once a game is 'complete' server-side, every later
+      // broadcast for that same id stays 'complete' — it never regresses).
+      setScreen('board');
       return undefined;
     }
     if (state.status === 'complete' && scoredOnlineGameId.current !== state.id) {
