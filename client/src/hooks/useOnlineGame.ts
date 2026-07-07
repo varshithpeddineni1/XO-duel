@@ -12,11 +12,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import type { GameState, Mark } from '../api/games.js';
 
-// Same-origin by default in production so the socket connects through the Vercel rewrite
-// (vercel.json) instead of the cross-site duckdns origin directly.
+// Unlike REST (api/*.ts), the socket connects directly to the duckdns origin rather than
+// through the Vercel rewrite (vercel.json) — Vercel's rewrite proxies plain HTTP fine but
+// doesn't proxy the Socket.io WebSocket upgrade to an external destination (confirmed: the
+// handshake gets a 404 through the rewrite). The Socket.io server already has CORS
+// configured for the Vercel origin (server/src/index.ts's `cors: { origin: env.clientOrigin
+// }`), so this cross-origin connection is allowed.
+//
+// Known gap this reopens: gameSocket.ts's socketPlayerId() reads the session cookie to
+// attribute game_players.player_id for stats/history/leaderboard, and a cross-site cookie
+// may not reach this direct connection on mobile Safari/Chrome (the same restriction the
+// rewrite fixes for REST). The game itself still plays to completion either way — playerId
+// is nullable throughout gameService.ts — but the result may not attribute to a mobile
+// player's account until the socket has its own non-cookie identity (e.g. a signed token
+// minted over the already-working REST session and passed in the handshake).
 const SOCKET_URL =
   (import.meta.env.VITE_SOCKET_URL as string | undefined) ??
-  (import.meta.env.DEV ? 'http://localhost:3000' : window.location.origin);
+  (import.meta.env.DEV ? 'http://localhost:3000' : 'https://xoduel.duckdns.org');
 
 export type OpponentStatus = 'connected' | 'disconnected';
 export type RematchState = 'idle' | 'requested-by-me' | 'requested-by-opponent';
