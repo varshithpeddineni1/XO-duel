@@ -10,12 +10,31 @@ export default defineConfig({
     baseURL: 'http://localhost:4173',
     trace: 'on-first-retry',
   },
-  webServer: {
-    command: 'npm run build --workspace client && npm run preview --workspace client',
-    url: 'http://localhost:4173',
-    reuseExistingServer: !process.env.CI,
-    cwd: '..',
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      // Real API server (built, not the tsx dev watcher) — Phase 2's game flows need it.
+      // Needs DATABASE_URL already set in the environment (see ci.yml's `e2e` job, or
+      // export it yourself for local runs against a reachable Postgres).
+      command: 'npm run build --workspace server && node server/dist/index.js',
+      url: 'http://localhost:3000/api/health',
+      reuseExistingServer: !process.env.CI,
+      cwd: '..',
+      timeout: 60_000,
+      env: {
+        PORT: '3000',
+        CLIENT_ORIGIN: 'http://localhost:4173',
+      },
+    },
+    {
+      command: 'npm run build --workspace client && npm run preview --workspace client',
+      url: 'http://localhost:4173',
+      reuseExistingServer: !process.env.CI,
+      cwd: '..',
+      timeout: 60_000,
+      env: {
+        VITE_API_URL: 'http://localhost:3000',
+      },
+    },
+  ],
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 });

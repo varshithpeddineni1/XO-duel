@@ -19,6 +19,14 @@ export default tseslint.config(
     languageOptions: {
       globals: { ...globals.node },
     },
+    rules: {
+      // Leading-underscore convention for intentionally-unused params (e.g. Express
+      // error-handling middleware's required 4-arg signature).
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
   },
   {
     files: ['client/**/*.{ts,tsx}'],

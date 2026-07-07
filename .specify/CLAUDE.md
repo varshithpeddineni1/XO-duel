@@ -70,28 +70,39 @@ docs/     runbook, ADRs
 > are still stubbed, and which Playwright test is expected to still fail, if
 > any. Do not leave this paragraph describing a stale state.
 
-**Phase 1 (foundations) landed.** npm workspaces (`server`, `client`, `e2e`) with
-package.json/tsconfig per workspace, shared root ESLint (flat config) + Prettier, and
-`.env.example`. `server/src/domain/gameLogic.ts` (`checkWinner`, `WIN_LINES`) and
-`server/src/domain/minimax.ts` (`minimax` with alpha-beta, `getAiMove` for
-easy/medium/hard/impossible) are ported from the design prototype, pure, and unit-tested
-(19 tests, ~96% coverage) including an exhaustive proof that `impossible` never loses
-(TEST-3). The initial migration (`server/migrations/..._initial-schema.js`) creates
-`players`, `friendships`, `games`, `game_players`, `moves`, `events`, and the
-connect-pg-simple `session` table with the indexes from the implementation plan; verified
-up/down in CI against a Postgres service container (no local Postgres needed yet).
-`client/src/styles/tokens.css` has the full OKLCH token set (light/dark via
-`[data-theme]`, ARC-3a) extracted from `.specify/XO Duel.html`, plus a **minimal
-placeholder** `App.tsx`/`theme.ts` (not a real screen) so the Playwright smoke suite and
-CI have something real to exercise. `server/src/index.ts` is a `GET /api/health` stub
-only — no game routes yet. `ci.yml` (lint, typecheck, test+coverage, migration check,
-Playwright e2e, secret scan) and `pr-review.yml` (8-layer AI review via
-`scripts/pr-review.mjs`) are both wired up and green.
+**Phase 1 (foundations) landed.** npm workspaces (`server`, `client`, `e2e`), shared root
+ESLint/Prettier, `.env.example`, the initial Postgres migration (`players`, `friendships`,
+`games`, `game_players`, `moves`, `events`, `session`), pure/unit-tested domain logic
+(`gameLogic.ts`, `minimax.ts`), and design tokens (`client/src/styles/tokens.css`, OKLCH,
+`[data-theme]`). `ci.yml` + `pr-review.yml` wired up.
 
-**Still stubbed / not started:** all 11 real screens and their shared components (Board,
-Cell, ModeButton, DifficultyCard, ResultBanner, HistoryRow, LeaderboardRow, BottomNav,
-ThemeToggle, RematchButton), every REST endpoint beyond `/api/health`, all Socket.io
-events, accounts/auth, friends, leaderboards, and the admin dashboard. No Playwright test
-currently expects any of that to exist — the smoke spec only covers the placeholder page.
-Next up per the suggested build order: Phase 2 (local 2-player + AI opponent, end to end,
-server-authoritative per ARC-5).
+**Phase 2 (local play + AI opponent, end to end) landed.** Real REST API, server-
+authoritative (ARC-5): `POST /api/games` (`mode: 'local'` or `mode: 'ai'` +
+`aiDifficulty`), `GET /api/games/:id`, `POST /api/games/:id/moves` (body `{ cell, mark }` —
+rejects wrong-turn/occupied/out-of-range moves and any client-submitted `mark: 'O'` in
+ai-mode; computes the AI's reply server-side in the same request via Phase 1's
+`getAiMove`). Board state is derived by replaying `moves` (`server/src/domain/board.ts`) —
+no `board` column exists. Finalization (outcome per `game_players`, `events` row) happens
+inline in the moves handler, not via a separate `/complete` endpoint. Validated with zod
+(`server/src/schemas/gameSchemas.ts`), rate-limited on creation (API-10), documented via
+an OpenAPI doc served at `/api/docs` in non-production (API-1). All 11 unit tests for the
+new schema/board logic plus 34 total server unit tests pass at ~97% coverage; a
+Postgres-backed integration suite (`games.integration.test.ts`, run via
+`npm run test:integration`, new `integration` CI job) covers the endpoints end to end,
+including a full "impossible" playthrough that never loses.
+
+Frontend: `App.tsx` is now a real screen state machine (home → difficulty → board →
+result), wired to the API. New components: `ModeButton`, `DifficultyCard`, `Board`/`Cell`
+(each cell has an accessible `aria-label` now), `ScoreTile`, `ResultBanner`,
+`RematchButton`, `ThemeToggle`. `theme.ts` moved to `theme/index.ts` to match CLAUDE.md's
+declared layout. Two new Playwright specs (`local-game.spec.ts`, `ai-game.spec.ts`) drive
+the real flows through client+server+Postgres — the `e2e` CI job now also runs the built
+API server (Playwright `webServer` array) against the same Postgres service container as
+`integration`. I could not run these two new e2e specs or the integration suite locally
+(no Postgres/Docker available in this environment) — CI is the real verification for both,
+same as Phase 1's migration check.
+
+**Still stubbed / not started:** `HistoryRow`, `LeaderboardRow`, `BottomNav` (no
+history/leaderboard/account screens yet — Phase 4/5), the Online Multiplayer mode card on
+home (Phase 3), all Socket.io events, accounts/auth, friends, leaderboards, and the admin
+dashboard. Next up per the suggested build order: Phase 3 (real-time online multiplayer).

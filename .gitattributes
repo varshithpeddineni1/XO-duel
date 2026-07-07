@@ -1,0 +1,4 @@
+# Force LF for all text files regardless of platform/local autocrlf settings, so a
+# Windows checkout can't silently flip line endings and desync from Prettier's default
+# (endOfLine: "lf") the way Phase 1's files just did.
+* text=auto eol=lf
