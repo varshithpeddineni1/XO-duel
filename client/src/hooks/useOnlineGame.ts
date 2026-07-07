@@ -98,9 +98,18 @@ export function useOnlineGame(inviteCode: string): UseOnlineGameResult {
       );
     });
 
-    socket.on('player_joined', (payload: { game: GameState }) => setGame(payload.game));
-    socket.on('move_made', (payload: { game: GameState }) => setGame(payload.game));
-    socket.on('game_over', (payload: { game: GameState }) => setGame(payload.game));
+    socket.on('player_joined', (payload: { game: GameState }) => {
+      console.log('[debug] player_joined', payload.game.status, payload.game.id);
+      setGame(payload.game);
+    });
+    socket.on('move_made', (payload: { game: GameState }) => {
+      console.log('[debug] move_made', payload.game.status, payload.game.id);
+      setGame(payload.game);
+    });
+    socket.on('game_over', (payload: { game: GameState }) => {
+      console.log('[debug] game_over', payload.game.status, payload.game.id);
+      setGame(payload.game);
+    });
     socket.on('player_disconnected', () => setOpponentStatus('disconnected'));
     socket.on('player_reconnected', () => setOpponentStatus('connected'));
     socket.on('rematch_requested', () => setRematchState('requested-by-opponent'));
@@ -123,9 +132,11 @@ export function useOnlineGame(inviteCode: string): UseOnlineGameResult {
   const submitMove = useCallback((cell: number) => {
     socketRef.current?.emit('make_move', { cell }, (response: MoveResponse) => {
       if (!response.ok) {
+        console.log('[debug] make_move ack error', response.error.code, response.error.message);
         setError(response.error.message);
         return;
       }
+      console.log('[debug] make_move ack', response.game.status, response.game.id);
       setGame(response.game);
     });
   }, []);

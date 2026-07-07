@@ -1,4 +1,16 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+// Forwards browser console/page errors into the test process's own stdout, so a CI failure
+// carries this directly in the plain-text step log — no artifact download needed to see
+// what the client-side code actually did.
+function forwardBrowserLogs(page: Page, label: string): void {
+  page.on('console', (msg) => {
+    console.log(`[${label} console:${msg.type()}] ${msg.text()}`);
+  });
+  page.on('pageerror', (err) => {
+    console.log(`[${label} pageerror] ${err.message}`);
+  });
+}
 
 // Two browser contexts simulate two real players. Context A creates the game and reads the
 // invite code off the waiting screen; context B "scans" it by navigating straight to the
@@ -12,6 +24,8 @@ test('online multiplayer: create, join, play to completion, and mutual-accept re
   const contextB = await browser.newContext();
   const pageA = await contextA.newPage();
   const pageB = await contextB.newPage();
+  forwardBrowserLogs(pageA, 'A');
+  forwardBrowserLogs(pageB, 'B');
 
   await pageA.goto('/');
   await pageA.getByRole('button', { name: 'Online Multiplayer' }).click();
@@ -60,6 +74,8 @@ test('online multiplayer: opponent disconnect auto-forfeits after the grace peri
   const contextB = await browser.newContext();
   const pageA = await contextA.newPage();
   const pageB = await contextB.newPage();
+  forwardBrowserLogs(pageA, 'A');
+  forwardBrowserLogs(pageB, 'B');
 
   await pageA.goto('/');
   await pageA.getByRole('button', { name: 'Online Multiplayer' }).click();

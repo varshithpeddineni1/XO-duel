@@ -63,6 +63,13 @@ export function App() {
   // mirrors the 500ms "let the winning move render" pause the local/AI paths use below.
   useEffect(() => {
     const state = onlineGame.game;
+    console.log(
+      '[debug] effect fired',
+      state?.status,
+      state?.id,
+      'scoredRef=',
+      scoredOnlineGameId.current,
+    );
     if (!onlineInviteCode || !state) return undefined;
 
     if (state.status === 'waiting') {
