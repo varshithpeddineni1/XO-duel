@@ -19,6 +19,7 @@ export const env = {
   adminUsername: optional('ADMIN_USERNAME', ''),
   adminPasswordHash: optional('ADMIN_PASSWORD_HASH', ''),
   clientOrigin: optional('CLIENT_ORIGIN', 'http://localhost:5173'),
+  disconnectGracePeriodMs: Number(optional('DISCONNECT_GRACE_PERIOD_MS', '30000')),
 } as const;
 
 export function requireDatabaseUrl(): string {

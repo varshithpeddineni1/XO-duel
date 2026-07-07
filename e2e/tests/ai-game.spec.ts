@@ -10,6 +10,11 @@ test('vs AI (impossible): X never wins, at best a draw', async ({ page }) => {
   await page.getByRole('button', { name: 'vs AI' }).click();
   await page.getByRole('button', { name: 'Impossible' }).click();
   await page.getByRole('button', { name: 'Start Game' }).click();
+  // Wait for the board to actually render (the create-game request can be momentarily
+  // slow, e.g. a cold connection pool) — .count() below doesn't auto-wait the way
+  // .click()/expect(...).toBeVisible() do, so without this the loop could see 0 empty
+  // cells on its very first check and bail out having never played a move.
+  await expect(page.getByRole('button', { name: 'Cell 1, empty' })).toBeVisible();
 
   let lastStatus: string | undefined;
   let lastWinner: string | null | undefined;

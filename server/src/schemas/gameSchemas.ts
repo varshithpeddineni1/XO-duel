@@ -7,6 +7,7 @@ export type DifficultyInput = z.infer<typeof difficultySchema>;
 export const createGameSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('local') }),
   z.object({ mode: z.literal('ai'), aiDifficulty: difficultySchema }),
+  z.object({ mode: z.literal('online') }),
 ]);
 export type CreateGameInput = z.infer<typeof createGameSchema>;
 
@@ -19,3 +20,14 @@ export const makeMoveSchema = z.object({
 export type MakeMoveInput = z.infer<typeof makeMoveSchema>;
 
 export const gameIdParamSchema = z.coerce.number().int().positive();
+
+export const inviteCodeSchema = z.string().regex(/^XO-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}$/);
+
+export const joinGameSchema = z.object({
+  inviteCode: inviteCodeSchema,
+  reconnectToken: z.string().optional(),
+});
+
+export const socketMoveSchema = z.object({
+  cell: z.number().int().min(0).max(8),
+});

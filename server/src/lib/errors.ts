@@ -20,3 +20,11 @@ export class IllegalMoveError extends Error {
     this.name = 'IllegalMoveError';
   }
 }
+
+// A stale or already-taken invite code — never a silent success (API-5).
+export class GameNotJoinableError extends Error {
+  constructor(inviteCode: string) {
+    super(`Game ${inviteCode} is not joinable`);
+    this.name = 'GameNotJoinableError';
+  }
+}

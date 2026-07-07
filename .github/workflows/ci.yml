@@ -173,6 +173,15 @@ jobs:
           name: playwright-screenshots
           path: e2e/screenshots
           retention-days: 14
+      # Raw per-test failure output (error-context.md, traces) — playwright-report's HTML
+      # viewer surfaces the same data inline, but a plain-text file is much faster to pull
+      # up when debugging from outside a browser.
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: playwright-test-results
+          path: e2e/test-results
+          retention-days: 14
 
   secret-scan:
     name: Secret scan

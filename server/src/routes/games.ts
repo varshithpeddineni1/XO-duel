@@ -2,8 +2,19 @@
 // logic here (ARC-2).
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
-import { createGameSchema, gameIdParamSchema, makeMoveSchema } from '../schemas/gameSchemas.js';
-import { createGame, getGame, submitMove } from '../services/gameService.js';
+import {
+  createGameSchema,
+  gameIdParamSchema,
+  inviteCodeSchema,
+  makeMoveSchema,
+} from '../schemas/gameSchemas.js';
+import {
+  createGame,
+  createOnlineGame,
+  findGameByInviteCode,
+  getGame,
+  submitMove,
+} from '../services/gameService.js';
 
 function asyncHandler(handler: (req: Request, res: Response) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -29,8 +40,17 @@ gamesRouter.post(
   createGameLimiter,
   asyncHandler(async (req, res) => {
     const input = createGameSchema.parse(req.body);
-    const game = await createGame(input);
+    const game = input.mode === 'online' ? await createOnlineGame() : await createGame(input);
     res.status(201).json(game);
+  }),
+);
+
+gamesRouter.get(
+  '/invite/:code',
+  asyncHandler(async (req, res) => {
+    const code = inviteCodeSchema.parse(req.params.code);
+    const game = await findGameByInviteCode(code);
+    res.status(200).json(game);
   }),
 );
 

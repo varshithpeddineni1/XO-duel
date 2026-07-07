@@ -1,14 +1,18 @@
-// Express app bootstrap. Thin — route/business logic lives in src/routes and src/services
-// (ARC-2). Server is the sole authority on game state (ARC-5): every mutation goes through
-// gameService, never trusting client-submitted board state.
+// Express + Socket.io bootstrap. Thin — route/business logic lives in src/routes,
+// src/services, and src/sockets (ARC-2). Server is the sole authority on game state
+// (ARC-5): every mutation goes through gameService, never trusting a client-submitted
+// board state, over REST or Socket.io alike.
+import { createServer as createHttpServer } from 'node:http';
 import cors from 'cors';
 import express from 'express';
+import { Server as SocketIoServer } from 'socket.io';
 import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { openApiDocument } from './openapi.js';
 import { gamesRouter } from './routes/games.js';
+import { registerGameSockets } from './sockets/gameSocket.js';
 
 export function createApp() {
   const app = express();
@@ -32,10 +36,24 @@ export function createApp() {
   return app;
 }
 
+// Wraps the Express app in a plain http.Server with Socket.io attached — used by the real
+// bootstrap below and by socket integration tests, which need a real server to connect
+// actual socket.io-client instances against (supertest, used for the REST-only tests,
+// only needs the bare Express app from createApp()).
+export function createServer() {
+  const app = createApp();
+  const httpServer = createHttpServer(app);
+  const io = new SocketIoServer(httpServer, {
+    cors: { origin: env.clientOrigin },
+  });
+  registerGameSockets(io);
+  return { httpServer, io };
+}
+
 /* c8 ignore start -- process bootstrap, not exercised by unit tests */
 if (process.env.VITEST === undefined) {
-  const app = createApp();
-  app.listen(env.port, () => {
+  const { httpServer } = createServer();
+  httpServer.listen(env.port, () => {
     logger.info('server started', { port: env.port });
   });
 }

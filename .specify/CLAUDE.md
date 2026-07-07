@@ -102,7 +102,35 @@ API server (Playwright `webServer` array) against the same Postgres service cont
 (no Postgres/Docker available in this environment) — CI is the real verification for both,
 same as Phase 1's migration check.
 
+**Phase 3 (real-time online multiplayer) landed.** `server/src/sockets/` (Socket.io,
+attached via a new `createServer()` in `index.ts` that wraps `createApp()` in a plain
+`http.Server` — `createApp()` itself is unchanged, still used by REST-only supertest):
+`join_game` (by invite code, binds a socket to X or O, or reconnects a disconnected mark
+via a token), `make_move` (same `checkWinner`/board-replay rules as REST, keyed by
+socket→mark), `game_over` (`reason: 'completed' | 'forfeit'`), `player_disconnected` /
+`player_reconnected` (30s grace period, `DISCONNECT_GRACE_PERIOD_MS`), and the mutual-accept
+rematch handshake (`request_rematch` / `rematch_requested` / `accept_rematch` /
+`decline_rematch` / `rematch_accepted`). `POST /api/games` now also accepts
+`mode: 'online'` (creates a `waiting` game, one seat filled, real invite code — API-6); new
+`GET /api/games/invite/:code` for pre-join validation. Room state (socket↔mark bindings,
+reconnect tokens, the grace-period timer) is deliberately **in server memory, not the
+database** — see `docs/adr/0002-online-room-state.md` for why and its one real limitation
+(a mid-game server restart loses reconnect capability for games in flight). A
+Postgres-backed Socket.io integration suite
+(`server/src/sockets/gameSocket.integration.test.ts`) covers join, a full game, illegal/
+out-of-turn move rejection, disconnect→forfeit, reconnect, and both rematch outcomes.
+
+Frontend: Home's Online Multiplayer card is wired up; `OnlineWaiting.tsx` shows the room
+code and a **real, scannable QR code** (`qrcode` package — the mockup's own QR was
+decorative/fake); `useOnlineGame.ts` owns the Socket.io connection and persists a reconnect
+token in `sessionStorage`. `GameScreen`/`Result` (Phase 2) gained an
+opponent-disconnected banner and mutual-accept rematch UI respectively, reused as-is
+otherwise. New Playwright spec `online-game.spec.ts` drives **two browser contexts**
+through create → join → full game → mutual rematch, and a separate disconnect→forfeit
+flow. As with Phase 2, I could not run the new integration suite or e2e spec locally (no
+Postgres/Docker in this environment) — CI is the real evidence.
+
 **Still stubbed / not started:** `HistoryRow`, `LeaderboardRow`, `BottomNav` (no
-history/leaderboard/account screens yet — Phase 4/5), the Online Multiplayer mode card on
-home (Phase 3), all Socket.io events, accounts/auth, friends, leaderboards, and the admin
-dashboard. Next up per the suggested build order: Phase 3 (real-time online multiplayer).
+history/leaderboard/account screens yet — Phase 4/5), accounts/auth, friends,
+leaderboards, and the admin dashboard. Next up per the suggested build order: Phase 4
+(accounts).

@@ -4,20 +4,22 @@
 export type Mark = 'X' | 'O';
 export type Cell = Mark | null;
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'impossible';
-export type GameMode = 'local' | 'ai';
+export type GameMode = 'local' | 'ai' | 'online';
 
 export interface GameState {
   id: number;
   mode: GameMode;
   aiDifficulty: Difficulty | null;
+  inviteCode: string | null;
   board: Cell[];
   currentPlayer: Mark;
-  status: 'in_progress' | 'complete';
+  status: 'waiting' | 'in_progress' | 'complete' | 'abandoned';
   winner: Mark | 'draw' | null;
   winLine: readonly [number, number, number] | null;
 }
 
-export type CreateGameInput = { mode: 'local' } | { mode: 'ai'; aiDifficulty: Difficulty };
+export type CreateGameInput =
+  { mode: 'local' } | { mode: 'ai'; aiDifficulty: Difficulty } | { mode: 'online' };
 
 export class GamesApiError extends Error {
   code: string;
@@ -54,6 +56,13 @@ export async function createGame(input: CreateGameInput): Promise<GameState> {
 
 export async function getGame(id: number): Promise<GameState> {
   const res = await fetch(`${API_URL}/api/games/${id}`);
+  return parseGameResponse(res);
+}
+
+// Used to validate an invite code up front (e.g. a typo'd/stale join link) before opening
+// a socket connection — joining itself happens over the socket, not this REST read.
+export async function getGameByInviteCode(inviteCode: string): Promise<GameState> {
+  const res = await fetch(`${API_URL}/api/games/invite/${inviteCode}`);
   return parseGameResponse(res);
 }
 
