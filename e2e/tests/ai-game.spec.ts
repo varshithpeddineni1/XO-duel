@@ -2,8 +2,10 @@ import { expect, test } from '@playwright/test';
 
 // Complements the exhaustive unit test (server/src/domain/minimax.test.ts) with one real
 // playthrough over the actual HTTP + UI path: pick the impossible tier, always play the
-// first available cell, and confirm the game never ends in a loss (TEST-4).
-test('vs AI (impossible): plays a full game and never loses', async ({ page }) => {
+// first available cell (an intentionally naive human strategy), and confirm X never wins
+// (TEST-4). The AI plays O, so "the AI never loses" means X draws at best — the AI winning
+// outright is a valid, expected outcome here, not a failure.
+test('vs AI (impossible): X never wins, at best a draw', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'vs AI' }).click();
   await page.getByRole('button', { name: 'Impossible' }).click();
@@ -28,8 +30,8 @@ test('vs AI (impossible): plays a full game and never loses', async ({ page }) =
   }
 
   expect(lastStatus).toBe('complete');
-  expect(lastWinner === 'draw' || lastWinner === 'X').toBe(true);
+  expect(lastWinner).not.toBe('X');
 
   await expect(page.getByText(/Wins!|Draw/)).toBeVisible();
-  await expect(page.getByText('AI Wins')).toHaveCount(0);
+  await expect(page.getByText('You Win!')).toHaveCount(0);
 });

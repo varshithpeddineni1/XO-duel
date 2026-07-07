@@ -156,7 +156,7 @@ describe('POST /api/games/:id/moves — ai mode', () => {
     expect(res.body.currentPlayer).toBe('X');
   });
 
-  it('never loses to the impossible AI tier over a full game', async () => {
+  it('the impossible AI tier never loses — X can win only a draw at best', async () => {
     const created = await createGame({ mode: 'ai', aiDifficulty: 'impossible' });
     const id = created.body.id;
     let state = created.body;
@@ -168,6 +168,9 @@ describe('POST /api/games/:id/moves — ai mode', () => {
       state = res.body;
     }
 
-    expect(state.winner === 'draw' || state.winner === 'X').toBe(true);
+    // The AI plays O, so "the AI never loses" means X never wins — X (playing an
+    // intentionally naive "first empty cell" strategy here) draws at best, and the
+    // perfect AI is free to win outright.
+    expect(state.winner).not.toBe('X');
   });
 });
