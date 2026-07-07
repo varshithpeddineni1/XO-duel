@@ -11,68 +11,82 @@ by hand.
 
 ```
 Browser
-  ├─ https://<your-domain>            → Vercel (client/, static build)
-  └─ https://api.<your-domain>        → Cloudflare (DNS + SSL, free tier)
-                                          → Hetzner CX23 VPS
-                                              → Nginx (deploy/nginx.conf, TLS via
-                                                Cloudflare Origin Certificate, WS upgrade)
-                                                  → Node/Socket.io (PM2-managed, :3000)
-                                                      → PostgreSQL (local, same VPS)
+  ├─ https://xoduel.vercel.app       → Vercel (client/, static build)
+  └─ https://xoduel.duckdns.org      → Hetzner VPS (204.168.235.206), DuckDNS A record
+                                          → Nginx (deploy/nginx.conf, TLS via a Let's
+                                            Encrypt cert from Certbot, WS upgrade headers)
+                                              → Node/Socket.io (PM2-managed, :3000)
+                                                  → PostgreSQL (local, same VPS)
 ```
 
 The client and server are deployed independently — a Vercel deploy and a VPS deploy are
-two separate actions, not one combined release step.
+two separate actions, not one combined release step. Unlike a Cloudflare-fronted setup,
+there's no proxy/CDN in front of the VPS here — DuckDNS just resolves the hostname
+straight to the origin IP, and Certbot's certificate is what visitors' browsers actually
+see. That also means no CDN-level DDoS/WAF layer, which is a fine, common tradeoff for a
+small project like this but worth knowing about.
 
 ## One-time setup
 
 This only happens once, when standing the environment up for the first time.
 
 1. **Provision the VPS.** Hetzner Cloud → new server → CX23, Helsinki, Ubuntu 24.04. Note
-   its public IP.
-2. **Run the bootstrap script** on the fresh VPS as root:
+   its public IP (`204.168.235.206` in this deployment).
+2. **DuckDNS.** Already done — `xoduel.duckdns.org` points at `204.168.235.206`. Nothing to
+   configure here; just confirm it resolves (`dig +short xoduel.duckdns.org` should print
+   the VPS's IP) before moving on to Certbot, since Certbot's HTTP challenge needs the
+   hostname to actually resolve to this box.
+3. **Run the bootstrap script** on the fresh VPS as root:
    ```
    curl -fsSL https://raw.githubusercontent.com/varshithpeddineni1/XO-duel/main/deploy/setup-vps.sh | bash
    ```
-   This installs Node, PostgreSQL 18, Nginx, and PM2; creates the `xo_duel` Postgres role/
-   database; sets up the firewall (only 22/80/443 reachable); and clones the repo to
-   `/opt/xo-duel`. It prints a checklist of everything still needed below — read that
-   output, it's the same list as here.
-3. **Domain + Cloudflare.** Add your domain to Cloudflare (update your registrar's
-   nameservers to Cloudflare's). Create an A record for `api.<your-domain>` pointing at the
-   VPS's IP, with the orange-cloud proxy **on**.
-4. **Origin certificate.** Cloudflare dashboard → SSL/TLS → Origin Server → Create
-   Certificate (defaults are fine, 15-year validity). Save the cert and key on the VPS:
-   ```
-   mkdir -p /etc/nginx/ssl
-   # paste the certificate into /etc/nginx/ssl/cloudflare-origin.pem
-   # paste the private key into    /etc/nginx/ssl/cloudflare-origin.key
-   chmod 600 /etc/nginx/ssl/cloudflare-origin.key
-   ```
-   In Cloudflare's SSL/TLS settings, set the encryption mode to **Full (strict)** — this is
-   what makes the origin certificate actually get used and satisfies SEC-7 (no plaintext
-   between Cloudflare and the origin, not just visitor-to-Cloudflare).
-5. **Nginx site config.**
+   This installs Node, PostgreSQL 18, Nginx, Certbot, and PM2; creates the `xo_duel`
+   Postgres role/database; sets up the firewall (only 22/80/443 reachable); and clones the
+   repo to `/opt/xo-duel`. It prints a checklist of everything still needed below — read
+   that output, it's the same list as here.
+4. **Nginx site config.**
    ```
    cp /opt/xo-duel/deploy/nginx.conf /etc/nginx/sites-available/xo-duel
-   # edit server_name in that file to your real api.<your-domain>
    ln -s /etc/nginx/sites-available/xo-duel /etc/nginx/sites-enabled/
    rm -f /etc/nginx/sites-enabled/default
    nginx -t && systemctl reload nginx
    ```
-6. **Fill in `.env`** at `/opt/xo-duel/.env` (the setup script copied `.env.example` there
+   `deploy/nginx.conf` already has `server_name xoduel.duckdns.org` — no editing needed
+   unless the hostname changes.
+5. **Certbot.**
+   ```
+   certbot --nginx -d xoduel.duckdns.org
+   ```
+   Interactive: it asks for an email (renewal/urgency notices) and ToS agreement, then
+   offers to redirect HTTP to HTTPS — say yes. Certbot edits
+   `/etc/nginx/sites-available/xo-duel` **in place** to add the port-443 server block
+   pointing at its own cert under `/etc/letsencrypt/live/xoduel.duckdns.org/` and the
+   port-80 redirect. From this point on, don't re-copy `deploy/nginx.conf` over the live
+   file — that would overwrite Certbot's additions and you'd need to re-run this step.
+6. **Confirm auto-renewal.** Certbot's package install already set up automatic renewal —
+   check which mechanism landed on this system:
+   ```
+   systemctl list-timers | grep certbot   # newer Ubuntu: a systemd timer, runs twice daily
+   cat /etc/cron.d/certbot 2>/dev/null    # older installs: a cron entry instead
+   ```
+   Either way, test it actually works without waiting for a real expiry:
+   ```
+   certbot renew --dry-run
+   ```
+7. **Fill in `.env`** at `/opt/xo-duel/.env` (the setup script copied `.env.example` there
    as a starting point): a real `SESSION_SECRET` (`openssl rand -hex 32`), the admin
    credentials (`npm run hash-admin -- '<passcode>'`), `DATABASE_URL` if you changed the
-   default Postgres password, and `CLIENT_ORIGIN` set to your Vercel domain (needed for
+   default Postgres password, and `CLIENT_ORIGIN=https://xoduel.vercel.app` (needed for
    CORS — API-7's guest play and everything else breaks without this being right).
-7. **PM2 on boot.** `pm2 startup systemd` and follow the one printed command (it registers
+8. **PM2 on boot.** `pm2 startup systemd` and follow the one printed command (it registers
    a systemd unit so PM2 — and this app — survive a reboot).
-8. **First deploy.** `cd /opt/xo-duel && ./deploy/deploy.sh` (see below).
-9. **Vercel.** New Vercel project from this GitHub repo, Root Directory set to `client`,
-   framework preset Vite (build command `npm run build`, output `dist`). Set its
-   `VITE_API_URL`/`VITE_SOCKET_URL` environment variables to `https://api.<your-domain>`.
-   Point your apex/`www` domain at the Vercel project in Cloudflare DNS too (Vercel's own
-   docs cover the exact CNAME/A record it wants).
-10. **Executable bits.** If cloned/deployed from a Windows-originated commit, the scripts'
+9. **First deploy.** `cd /opt/xo-duel && ./deploy/deploy.sh` (see below).
+10. **Vercel.** New Vercel project from this GitHub repo, Root Directory set to `client`,
+    framework preset Vite (build command `npm run build`, output `dist`). No custom domain
+    needed — Vercel's own `xoduel.vercel.app` is the production URL. Set its
+    `VITE_API_URL`/`VITE_SOCKET_URL` environment variables to
+    `https://xoduel.duckdns.org`.
+11. **Executable bits.** If cloned/deployed from a Windows-originated commit, the scripts'
     executable bit may not have survived (`git config core.filemode` is often `false` on
     Windows). Run `chmod +x deploy/*.sh` once on the VPS if `./deploy/deploy.sh` complains
     about permissions.
@@ -141,6 +155,11 @@ tail -f /var/log/nginx/error.log
 - **CORS errors in the browser console:** `CLIENT_ORIGIN` in `.env` doesn't match the
   Vercel domain actually being used (including `https://` vs `http://` and the exact
   subdomain).
-- **Cloudflare shows an SSL error:** confirm the encryption mode is "Full (strict)" (not
-  "Flexible") and that the origin certificate/key paths in `deploy/nginx.conf` match where
-  you actually saved them.
+- **Certbot's HTTP challenge fails:** `dig +short xoduel.duckdns.org` doesn't resolve to
+  this box, or port 80 isn't actually reachable (check `ufw status`, and that Nginx is
+  running and the `xo-duel` site is enabled) — the ACME HTTP-01 challenge Certbot uses
+  needs both to be true before it can issue a certificate.
+- **Browser shows a certificate warning:** confirm `/etc/letsencrypt/live/xoduel.duckdns.org/`
+  actually has current files (`certbot certificates` lists expiry), and that
+  `certbot renew --dry-run` succeeds — if renewal quietly broke, the cert eventually
+  expires even though nothing else changed.

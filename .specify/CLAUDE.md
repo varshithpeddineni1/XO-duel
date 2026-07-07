@@ -8,10 +8,11 @@ non-trivial work (AGENT-1).
 ## What this is
 
 XO Duel: a full-stack online Tic Tac Toe game. Node + Express + Socket.io API,
-Postgres, React + Vite SPA, hosted on a Hetzner VPS (backend) and Vercel
-(frontend) behind Cloudflare (DNS + SSL) and Nginx. Guest play works for every
-mode, including online multiplayer — no login wall anywhere (API-7). Accounts
-are an optional upgrade for history, friends, and leaderboards.
+Postgres, React + Vite SPA, hosted on a Hetzner VPS (backend, behind Nginx —
+TLS via Certbot/Let's Encrypt for the DuckDNS hostname `xoduel.duckdns.org`)
+and Vercel (frontend, `xoduel.vercel.app`). Guest play works for every mode,
+including online multiplayer — no login wall anywhere (API-7). Accounts are
+an optional upgrade for history, friends, and leaderboards.
 
 ## Build, test, run
 
@@ -215,40 +216,55 @@ below would have stayed permanently empty for every online game.
   `admin.spec.ts`. As with every phase so far, I could not run the integration suites or
   e2e specs locally (no Postgres/Docker in this environment) — CI is the real evidence.
 
-**Phase 6 (deploy) landed — tooling only, live deployment is pending on real
-infrastructure.** Per the user's explicit decision, the backend deploy mechanism (the
-spec's §11 open decision) is a **manual pull + PM2-reload script**, not GitHub Actions SSH
+**Phase 6 (deploy) landed — tooling only, live deployment is pending on the user actually
+running it.** Per the user's explicit decision, the backend deploy mechanism (the spec's
+§11 open decision) is a **manual pull + PM2-reload script**, not GitHub Actions SSH
 automation — deliberately, to avoid putting VPS SSH keys in GitHub secrets. This phase is
-entirely config/scripts/docs; no application code changed.
+entirely config/scripts/docs; no application code changed. The user has a real Hetzner VPS
+(`204.168.235.206`) and used **DuckDNS** (`xoduel.duckdns.org`, already pointed at that IP)
+instead of a purchased domain + Cloudflare — the deploy tooling was updated for that
+topology in a follow-up (still same phase): **Certbot** (`certbot --nginx`) issues a free
+Let's Encrypt certificate directly for the origin instead of a Cloudflare Origin
+Certificate, since there's no CDN/proxy in front of this VPS at all. **This is a deliberate
+deviation from spec §10/rules OP-4/SEC-7's literal "behind Cloudflare" wording** — the
+user's explicit call, not an oversight. The underlying intent (production traffic over
+TLS, no plaintext to the origin from the public internet) is still met, just via Certbot's
+cert directly on Nginx rather than a Cloudflare Origin Certificate behind Cloudflare's
+proxy; there's no CDN/WAF/DDoS layer this way, which is a real, accepted tradeoff for a
+small project like this, not a security equivalent in every respect.
 
 - `deploy/setup-vps.sh` — one-time Ubuntu 24.04 bootstrap (Node 20.x via NodeSource,
   PostgreSQL 18 via the PGDG apt repo since Ubuntu 24.04's own repos don't carry it, Nginx,
-  PM2, `ufw` firewall allowing only 22/80/443, the `xo_duel` Postgres role/database, repo
-  clone to `/opt/xo-duel`).
-- `deploy/nginx.conf` — reverse-proxy site config; TLS via a Cloudflare Origin Certificate
-  ("Full (strict)" mode — stricter than Cloudflare's "Flexible" mode, satisfies SEC-7's "no
-  plaintext to the origin" more literally); WebSocket upgrade headers (without them,
-  Socket.io's connections fail to upgrade — API-8).
+  Certbot + its Nginx plugin, PM2, `ufw` firewall allowing only 22/80/443, the `xo_duel`
+  Postgres role/database, repo clone to `/opt/xo-duel`).
+- `deploy/nginx.conf` — reverse-proxy site config for `xoduel.duckdns.org`, port 80 only on
+  purpose: `certbot --nginx` edits this file **in place** on the VPS to add the port-443
+  SSL block (pointing at its own cert under `/etc/letsencrypt/live/`) and the redirect —
+  the checked-in version is deliberately just the pre-Certbot starting point, not what
+  ends up live. WebSocket upgrade headers are in there from the start (without them,
+  Socket.io's connections fail to upgrade — API-8). Certbot's own package install sets up
+  automatic renewal (a systemd timer or cron job depending on the install) with no extra
+  action needed beyond confirming it's there (`docs/runbook.md` shows how).
 - `deploy/ecosystem.config.cjs` — PM2 process file; holds no secrets, `cwd` is derived from
   the file's own location (`__dirname`) so it resolves correctly regardless of where
   `deploy.sh` happens to invoke `pm2` from.
 - `deploy/deploy.sh` — the actual redeploy script a human runs by hand after a merge: pull,
   `npm ci`, build, migrate, `pm2 startOrReload --update-env`, then checks `/api/health`
-  and fails loudly if it doesn't respond.
-- `docs/runbook.md` — the spec's named deliverable: one-time setup (VPS → Cloudflare →
-  origin cert → Nginx → `.env` → PM2 → Vercel, in order, since later steps depend on
-  earlier ones), routine deploy, restart, logs, rollback (with the migration-rollback
-  caveat — `deploy.sh`'s `npm run migrate` only ever applies new migrations forward,
-  checking out an older commit doesn't undo one a bad release already applied), and
-  troubleshooting.
+  and fails loudly if it doesn't respond. Domain-agnostic — unaffected by the DuckDNS
+  switch.
+- `docs/runbook.md` — the spec's named deliverable: one-time setup (VPS → confirm DuckDNS
+  resolves → Nginx site config → Certbot → confirm auto-renewal → `.env` → PM2 → Vercel, in
+  order, since later steps depend on earlier ones), routine deploy, restart, logs, rollback
+  (with the migration-rollback caveat — `deploy.sh`'s `npm run migrate` only ever applies
+  new migrations forward, checking out an older commit doesn't undo one a bad release
+  already applied), and troubleshooting (including Certbot-specific failure modes).
 
-**What's still genuinely pending, and can't be done from here:** provisioning the actual
-Hetzner VPS, registering a domain, creating the Cloudflare/Vercel projects, and the spec's
-own Phase 6 verify line — a live domain reachable off-network, a full online game played
-between two real devices through the deployed stack, health check green. None of that is
-possible without real accounts and money the user has to provide; the runbook is written
-so that once they exist, standing it up is following numbered steps, not figuring things
-out from scratch.
+**What's still genuinely pending, and can't be done from here:** actually running these
+scripts against the real VPS, and the spec's own Phase 6 verify line — a live domain
+reachable off-network, a full online game played between two real devices through the
+deployed stack, health check green. I can write and syntax-check every file, but I can't
+SSH into the box myself or click through Certbot's interactive prompts; that's the user's
+to do, following the runbook.
 
 **Still stubbed / not started (out of v1 scope on purpose):** admin moderation
 (suspend/ban — explicitly a future phase per SEC-10), nickname-editing UI for guests,
