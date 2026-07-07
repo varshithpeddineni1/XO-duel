@@ -20,6 +20,11 @@ export const env = {
   adminPasswordHash: optional('ADMIN_PASSWORD_HASH', ''),
   clientOrigin: optional('CLIENT_ORIGIN', 'http://localhost:5173'),
   disconnectGracePeriodMs: Number(optional('DISCONNECT_GRACE_PERIOD_MS', '30000')),
+  // A pre-join "waiting" invite has no live opponent to notify on disconnect, unlike a
+  // mid-game drop — the whole point of a shareable invite link/QR code is surviving the
+  // creator's tab closing while they actually go send it. 30s (disconnectGracePeriodMs)
+  // isn't realistic time for that; this is deliberately much longer.
+  waitingGameGracePeriodMs: Number(optional('WAITING_GAME_GRACE_PERIOD_MS', '300000')),
 } as const;
 
 export function requireDatabaseUrl(): string {
