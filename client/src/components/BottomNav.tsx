@@ -1,4 +1,4 @@
-export type NavDestination = 'home' | 'account';
+export type NavDestination = 'home' | 'history' | 'leaderboard' | 'account';
 
 interface BottomNavProps {
   active: NavDestination;
@@ -31,8 +31,6 @@ function Tab({ label, active, onClick }: TabProps) {
   );
 }
 
-// Home + Account only for now — History and Leaderboard tabs are added in Phase 5 once
-// those destinations actually exist (a tab that leads nowhere is worse than no tab).
 export function BottomNav({ active, onNavigate }: BottomNavProps) {
   return (
     <div
@@ -45,6 +43,12 @@ export function BottomNav({ active, onNavigate }: BottomNavProps) {
       }}
     >
       <Tab label="Home" active={active === 'home'} onClick={() => onNavigate('home')} />
+      <Tab label="History" active={active === 'history'} onClick={() => onNavigate('history')} />
+      <Tab
+        label="Ranks"
+        active={active === 'leaderboard'}
+        onClick={() => onNavigate('leaderboard')}
+      />
       <Tab label="Account" active={active === 'account'} onClick={() => onNavigate('account')} />
     </div>
   );

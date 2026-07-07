@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AdminApiError, adminLogin, adminLogout } from './api/admin.js';
 import {
   AuthApiError,
   createOrResumeSession,
@@ -8,21 +9,39 @@ import {
   register,
   type PlayerState,
 } from './api/auth.js';
+import { acceptFriendInvite } from './api/friends.js';
 import { createGame, submitMove, type Difficulty, type GameState } from './api/games.js';
 import { BottomNav, type NavDestination } from './components/BottomNav.js';
 import { Account } from './pages/Account.js';
+import { AdminDashboard } from './pages/AdminDashboard.js';
+import { AdminLogin } from './pages/AdminLogin.js';
 import { Difficulty as DifficultyPage } from './pages/Difficulty.js';
+import { Friends } from './pages/Friends.js';
 import { GameScreen } from './pages/GameScreen.js';
+import { History } from './pages/History.js';
 import { Home } from './pages/Home.js';
+import { Leaderboard } from './pages/Leaderboard.js';
 import { Login, type AuthMode } from './pages/Login.js';
 import { OnlineWaiting } from './pages/OnlineWaiting.js';
 import { Result } from './pages/Result.js';
 import { resolveInitialTheme, toggleTheme, THEME_STORAGE_KEY, type Theme } from './theme/index.js';
 import { useOnlineGame } from './hooks/useOnlineGame.js';
 
-type Screen = 'home' | 'difficulty' | 'online-waiting' | 'board' | 'result' | 'account' | 'login';
+type Screen =
+  | 'home'
+  | 'difficulty'
+  | 'online-waiting'
+  | 'board'
+  | 'result'
+  | 'account'
+  | 'login'
+  | 'history'
+  | 'leaderboard'
+  | 'friends'
+  | 'admin-login'
+  | 'admin-dashboard';
 type Mode = 'local' | 'ai' | 'online';
-const NAV_SCREENS: Screen[] = ['home', 'account'];
+const NAV_SCREENS: Screen[] = ['home', 'history', 'leaderboard', 'account'];
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -30,6 +49,10 @@ function capitalize(value: string): string {
 
 function inviteCodeFromUrl(): string | null {
   return new URLSearchParams(window.location.search).get('join');
+}
+
+function friendInviteCodeFromUrl(): string | null {
+  return new URLSearchParams(window.location.search).get('friend');
 }
 
 function clearJoinParam(): void {
@@ -63,6 +86,8 @@ export function App() {
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const friendInviteHandled = useRef(false);
 
   const onlineGame = useOnlineGame(onlineInviteCode ?? '');
 
@@ -94,6 +119,23 @@ export function App() {
       setOnlineInviteCode(joinCode);
     }
   }, []);
+
+  // A shared friend invite link (?friend=CODE) — only actionable once we know whether this
+  // session is registered, so it waits on `player` rather than running on mount like the
+  // game join-link effect above (which doesn't need an account to make sense).
+  useEffect(() => {
+    const friendCode = friendInviteCodeFromUrl();
+    if (!friendCode || friendInviteHandled.current || player === null) return;
+    friendInviteHandled.current = true;
+    clearJoinParam();
+    if (!player.isRegistered) {
+      setError('Log in or create an account first, then open that invite link again.');
+      return;
+    }
+    void acceptFriendInvite(friendCode)
+      .then(() => setScreen('friends'))
+      .catch(() => setError('That invite link is not valid.'));
+  }, [player]);
 
   // Drives screen transitions from the online game's live server-pushed status —
   // mirrors the 500ms "let the winning move render" pause the local/AI paths use below.
@@ -263,6 +305,21 @@ export function App() {
     }
   }
 
+  async function handleAdminSubmit(username: string, password: string) {
+    setAdminError(null);
+    try {
+      await adminLogin(username, password);
+      setScreen('admin-dashboard');
+    } catch (err) {
+      setAdminError(err instanceof AdminApiError ? err.message : 'Something went wrong.');
+    }
+  }
+
+  async function handleAdminLogout() {
+    await adminLogout();
+    setScreen('account');
+  }
+
   const activeGame = mode === 'online' ? onlineGame.game : game;
   const opponentLabel =
     mode === 'local'
@@ -364,6 +421,10 @@ export function App() {
             onGoLogin={handleGoLogin}
             onGoRegister={handleGoRegister}
             onLogout={() => void handleLogout()}
+            onGoAdmin={() => {
+              setAdminError(null);
+              setScreen('admin-login');
+            }}
           />
         )}
 
@@ -375,6 +436,39 @@ export function App() {
             onSubmit={(username, password) => void handleAuthSubmit(username, password)}
             onContinueAsGuest={() => setScreen('account')}
             onBack={() => setScreen('account')}
+          />
+        )}
+
+        {screen === 'history' && <History theme={theme} onToggleTheme={handleToggleTheme} />}
+
+        {screen === 'leaderboard' && (
+          <Leaderboard
+            theme={theme}
+            onToggleTheme={handleToggleTheme}
+            myPlayerId={player?.id ?? null}
+            onManageFriends={() => setScreen('friends')}
+          />
+        )}
+
+        {screen === 'friends' && (
+          <Friends
+            myInviteCode={player?.inviteCode ?? null}
+            onBack={() => setScreen('leaderboard')}
+          />
+        )}
+
+        {screen === 'admin-login' && (
+          <AdminLogin
+            error={adminError}
+            onSubmit={(username, password) => void handleAdminSubmit(username, password)}
+            onBack={() => setScreen('account')}
+          />
+        )}
+
+        {screen === 'admin-dashboard' && (
+          <AdminDashboard
+            onBack={() => setScreen('account')}
+            onLogout={() => void handleAdminLogout()}
           />
         )}
       </div>

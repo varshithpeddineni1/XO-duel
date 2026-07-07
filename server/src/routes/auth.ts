@@ -1,6 +1,7 @@
 // Optional account upgrade on top of a guest session (SEC-3) — argon2-backed (SEC-1).
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
+import { destroySession, regenerateSession } from '../lib/sessionHelpers.js';
 import { loginSchema, registerSchema } from '../schemas/authSchemas.js';
 import { getOrCreatePlayer, loginAccount, registerAccount } from '../services/playerService.js';
 
@@ -8,18 +9,6 @@ function asyncHandler(handler: (req: Request, res: Response) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
     handler(req, res).catch(next);
   };
-}
-
-function regenerateSession(req: Request): Promise<void> {
-  return new Promise((resolve, reject) => {
-    req.session.regenerate((err) => (err ? reject(err) : resolve()));
-  });
-}
-
-function destroySession(req: Request): Promise<void> {
-  return new Promise((resolve, reject) => {
-    req.session.destroy((err) => (err ? reject(err) : resolve()));
-  });
 }
 
 // Credential-stuffing resistance (API-10) — tighter than game creation's limiter, and
@@ -33,7 +22,7 @@ const loginLimiter = rateLimit({
 
 const registerLimiter = rateLimit({
   windowMs: 60_000,
-  limit: 20,
+  limit: 30,
   standardHeaders: true,
   legacyHeaders: false,
 });

@@ -1,6 +1,7 @@
 // Real-time online-game event handlers (API-8: pushed as they happen, never polled).
 // Server-authoritative (ARC-5): a socket is bound to exactly one mark at join time, and
 // every move is validated the same way as the REST path (gameService.submitMove).
+import type { Request } from 'express';
 import type { Server, Socket } from 'socket.io';
 import { env } from '../config/env.js';
 import type { Mark } from '../domain/gameLogic.js';
@@ -43,6 +44,16 @@ function toAckError(err: unknown): AckError {
 
 function otherSocketId(room: RoomState, mark: Mark): string | undefined {
   return room.sockets[otherMark(mark)];
+}
+
+// The session middleware is shared with Express (see index.ts's createServer) via
+// io.engine.use(), so socket.request carries whichever session cookie this connection's
+// browser sent — the same identity REST calls from that same tab would see. socket.request
+// is typed as plain http.IncomingMessage; @types/express-session only augments
+// Express.Request (not IncomingMessage directly), hence the cast — the property really is
+// there at runtime once io.engine.use(sessionMiddleware) has run.
+function socketPlayerId(socket: Socket): number | null {
+  return (socket.request as Request).session?.playerId ?? null;
 }
 
 function tryReconnect(socket: Socket, room: RoomState, reconnectToken: string): Mark | null {
@@ -88,7 +99,7 @@ async function handleJoinGame(io: Server, socket: Socket, payload: unknown, ack:
       return;
     }
 
-    const joined = await joinOnlineGame(inviteCode);
+    const joined = await joinOnlineGame(inviteCode, socketPlayerId(socket));
     existingRoom.sockets.O = socket.id;
     await socket.join(roomName(game.id));
     io.to(roomName(game.id)).emit('player_joined', { game: joined });
@@ -140,7 +151,12 @@ async function handleAcceptRematch(io: Server, socket: Socket) {
   const { room } = found;
 
   try {
-    const newGame = await createRematchGame();
+    const xSocket = room.sockets.X ? io.sockets.sockets.get(room.sockets.X) : undefined;
+    const oSocket = room.sockets.O ? io.sockets.sockets.get(room.sockets.O) : undefined;
+    const newGame = await createRematchGame(
+      xSocket ? socketPlayerId(xSocket) : null,
+      oSocket ? socketPlayerId(oSocket) : null,
+    );
     const oldRoomName = roomName(room.gameId);
     const newRoomName = roomName(newGame.id);
     const newRoom = createRoom(newGame.id);

@@ -12,17 +12,20 @@ import { logger } from './lib/logger.js';
 import { createSessionMiddleware } from './middleware/session.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { openApiDocument } from './openapi.js';
+import { adminRouter } from './routes/admin.js';
 import { authRouter } from './routes/auth.js';
+import { friendsRouter } from './routes/friends.js';
 import { gamesRouter } from './routes/games.js';
+import { leaderboardRouter } from './routes/leaderboard.js';
 import { meRouter, sessionRouter } from './routes/session.js';
 import { registerGameSockets } from './sockets/gameSocket.js';
 
-export function createApp() {
+export function createApp(sessionMiddleware = createSessionMiddleware()) {
   const app = express();
 
   app.use(cors({ origin: env.clientOrigin, credentials: true }));
   app.use(express.json());
-  app.use(createSessionMiddleware());
+  app.use(sessionMiddleware);
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok' });
@@ -37,6 +40,9 @@ export function createApp() {
   app.use('/api/me', meRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/games', gamesRouter);
+  app.use('/api/friends', friendsRouter);
+  app.use('/api/leaderboard', leaderboardRouter);
+  app.use('/api/admin', adminRouter);
 
   app.use(errorHandler);
 
@@ -48,11 +54,16 @@ export function createApp() {
 // actual socket.io-client instances against (supertest, used for the REST-only tests,
 // only needs the bare Express app from createApp()).
 export function createServer() {
-  const app = createApp();
+  // One shared session middleware instance for both Express and Socket.io — an online
+  // game's socket connection needs to see the same session a player registered/logged in
+  // under over REST, so join_game can attribute game_players.player_id correctly.
+  const sessionMiddleware = createSessionMiddleware();
+  const app = createApp(sessionMiddleware);
   const httpServer = createHttpServer(app);
   const io = new SocketIoServer(httpServer, {
     cors: { origin: env.clientOrigin },
   });
+  io.engine.use(sessionMiddleware);
   registerGameSockets(io);
   return { httpServer, io };
 }

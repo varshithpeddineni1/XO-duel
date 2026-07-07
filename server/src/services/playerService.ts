@@ -5,9 +5,11 @@
 import argon2 from 'argon2';
 import { randomInt } from 'node:crypto';
 import { getPool } from '../db/pool.js';
+import { assignInviteCode } from './friendService.js';
 import {
   AlreadyRegisteredError,
   InvalidCredentialsError,
+  RegistrationRequiredError,
   UsernameTakenError,
 } from '../lib/errors.js';
 
@@ -16,6 +18,7 @@ export interface PlayerState {
   nickname: string;
   username: string | null;
   isRegistered: boolean;
+  inviteCode: string | null;
 }
 
 interface PlayerRow {
@@ -23,9 +26,10 @@ interface PlayerRow {
   nickname: string;
   username: string | null;
   is_registered: boolean;
+  invite_code: string | null;
 }
 
-const PLAYER_ROW_COLUMNS = 'id, nickname, username, is_registered';
+const PLAYER_ROW_COLUMNS = 'id, nickname, username, is_registered, invite_code';
 
 function toPlayerState(row: PlayerRow): PlayerState {
   return {
@@ -33,6 +37,7 @@ function toPlayerState(row: PlayerRow): PlayerState {
     nickname: row.nickname,
     username: row.username,
     isRegistered: row.is_registered,
+    inviteCode: row.invite_code,
   };
 }
 
@@ -77,6 +82,15 @@ export async function getPlayerById(playerId: number): Promise<PlayerState | nul
   return row ? toPlayerState(row) : null;
 }
 
+// History, leaderboards, and friends are registered-account features (API-9) — shared by
+// every route in those areas that needs to turn "whatever this session is" into "a real
+// account, or a clear 403" before doing anything else.
+export async function requireRegisteredPlayer(playerId: number | undefined): Promise<PlayerState> {
+  const player = playerId === undefined ? null : await getPlayerById(playerId);
+  if (!player?.isRegistered) throw new RegistrationRequiredError();
+  return player;
+}
+
 export async function registerAccount(
   playerId: number,
   username: string,
@@ -92,7 +106,8 @@ export async function registerAccount(
     );
     const row = rows[0];
     if (!row) throw new AlreadyRegisteredError();
-    return toPlayerState(row);
+    const inviteCode = await assignInviteCode(getPool(), row.id);
+    return { ...toPlayerState(row), inviteCode };
   } catch (err) {
     if (isUniqueViolation(err)) {
       throw new UsernameTakenError(`Username "${username}" is already taken.`);

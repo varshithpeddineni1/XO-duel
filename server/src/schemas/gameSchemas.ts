@@ -4,6 +4,8 @@ import { z } from 'zod';
 export const difficultySchema = z.enum(['easy', 'medium', 'hard', 'impossible']);
 export type DifficultyInput = z.infer<typeof difficultySchema>;
 
+export const gameModeSchema = z.enum(['local', 'ai', 'online']);
+
 export const createGameSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('local') }),
   z.object({ mode: z.literal('ai'), aiDifficulty: difficultySchema }),

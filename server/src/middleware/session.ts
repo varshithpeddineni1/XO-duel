@@ -8,6 +8,9 @@ import { getPool } from '../db/pool.js';
 declare module 'express-session' {
   interface SessionData {
     playerId?: number;
+    // Same session infrastructure as player identity, not a second parallel system (SEC-2:
+    // three roles enforced at the API layer — this is that enforcement point for admin).
+    isAdmin?: boolean;
   }
 }
 

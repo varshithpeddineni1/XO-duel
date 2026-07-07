@@ -3,12 +3,19 @@
 // (API-3: clear JSON shape, never leaking stack traces, SQL, or file paths).
 import { ZodError } from 'zod';
 import {
+  AdminAuthRequiredError,
+  AlreadyFriendsError,
   AlreadyRegisteredError,
+  CannotFriendSelfError,
+  FriendRequestNotFoundError,
   GameNotFoundError,
   GameNotInProgressError,
   GameNotJoinableError,
   IllegalMoveError,
   InvalidCredentialsError,
+  InvalidInviteCodeError,
+  PlayerNotFoundError,
+  RegistrationRequiredError,
   UsernameTakenError,
 } from './errors.js';
 
@@ -46,6 +53,27 @@ export function toErrorResponse(err: unknown): ErrorResponse {
   }
   if (err instanceof InvalidCredentialsError) {
     return { status: 401, code: 'INVALID_CREDENTIALS', message: err.message };
+  }
+  if (err instanceof RegistrationRequiredError) {
+    return { status: 403, code: 'REGISTRATION_REQUIRED', message: err.message };
+  }
+  if (err instanceof AdminAuthRequiredError) {
+    return { status: 401, code: 'ADMIN_AUTH_REQUIRED', message: err.message };
+  }
+  if (err instanceof CannotFriendSelfError) {
+    return { status: 400, code: 'CANNOT_FRIEND_SELF', message: err.message };
+  }
+  if (err instanceof AlreadyFriendsError) {
+    return { status: 409, code: 'ALREADY_FRIENDS', message: err.message };
+  }
+  if (err instanceof FriendRequestNotFoundError) {
+    return { status: 404, code: 'FRIEND_REQUEST_NOT_FOUND', message: err.message };
+  }
+  if (err instanceof InvalidInviteCodeError) {
+    return { status: 404, code: 'INVALID_INVITE_CODE', message: err.message };
+  }
+  if (err instanceof PlayerNotFoundError) {
+    return { status: 404, code: 'PLAYER_NOT_FOUND', message: err.message };
   }
   return { status: 500, code: 'INTERNAL_ERROR', message: 'Something went wrong.' };
 }

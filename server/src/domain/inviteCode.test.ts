@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateInviteCode } from './inviteCode.js';
+import { generateFriendInviteCode, generateInviteCode } from './inviteCode.js';
 
 describe('generateInviteCode', () => {
   it('matches the XO-XXXXX format using only the unambiguous alphabet', () => {
@@ -24,5 +24,14 @@ describe('generateInviteCode', () => {
     const fixedRandom = () => 0.999999;
     const code = generateInviteCode(fixedRandom);
     expect(code).toBe('XO-99999');
+  });
+});
+
+describe('generateFriendInviteCode', () => {
+  it('uses an FR- prefix so it cannot be confused with a game invite code', () => {
+    for (let i = 0; i < 50; i++) {
+      const code = generateFriendInviteCode();
+      expect(code).toMatch(/^FR-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}$/);
+    }
   });
 });
