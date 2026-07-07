@@ -91,9 +91,15 @@ export function useOnlineGame(inviteCode: string): UseOnlineGameResult {
 
     const socket = io(SOCKET_URL, { transports: ['websocket'] });
     socketRef.current = socket;
-    const stored = loadStoredSession(inviteCode);
 
     socket.on('connect', () => {
+      // Re-read on every connect, not once at mount — this fires again on every automatic
+      // socket.io reconnect (e.g. a mobile browser resuming a dropped/backgrounded socket),
+      // by which point the original join's ack has already saved this game's real token.
+      // Reading it once outside this handler meant every reconnect kept resending the
+      // pre-join (undefined) value forever, since the ack that saves the real token arrives
+      // after this closure had already captured the stale one.
+      const stored = loadStoredSession(inviteCode);
       socket.emit(
         'join_game',
         { inviteCode, reconnectToken: stored?.reconnectToken },

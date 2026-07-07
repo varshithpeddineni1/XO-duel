@@ -76,23 +76,6 @@ async function handleJoinGame(io: Server, socket: Socket, payload: unknown, ack:
     const game = await findGameByInviteCode(inviteCode);
     const existingRoom = getRoom(game.id);
 
-    // TEMPORARY — diagnosing a cross-device reconnect failure (creator's own tab getting
-    // rejected as "not joinable" after backgrounding). Logs match results, never the actual
-    // token values, so this is safe to leave in briefly but should be removed once resolved.
-    logger.info('join_game received', {
-      gameId: game.id,
-      inviteCode,
-      status: game.status,
-      hasReconnectToken: Boolean(reconnectToken),
-      hasExistingRoom: Boolean(existingRoom),
-      matchesX: existingRoom ? existingRoom.tokens.X === reconnectToken : null,
-      matchesO: existingRoom ? existingRoom.tokens.O === reconnectToken : null,
-      roomHasSocketX: existingRoom ? Boolean(existingRoom.sockets.X) : null,
-      roomHasSocketO: existingRoom ? Boolean(existingRoom.sockets.O) : null,
-      disconnectedMark: existingRoom?.disconnectedMark ?? null,
-      hasDisconnectTimer: existingRoom ? Boolean(existingRoom.disconnectTimer) : null,
-    });
-
     if (reconnectToken && existingRoom) {
       const mark = tryReconnect(socket, existingRoom, reconnectToken);
       if (mark) {
