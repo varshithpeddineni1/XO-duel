@@ -12,8 +12,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import type { GameState, Mark } from '../api/games.js';
 
+// Same-origin by default in production so the socket connects through the Vercel rewrite
+// (vercel.json) instead of the cross-site duckdns origin directly.
 const SOCKET_URL =
-  (import.meta.env.VITE_SOCKET_URL as string | undefined) ?? 'http://localhost:3000';
+  (import.meta.env.VITE_SOCKET_URL as string | undefined) ??
+  (import.meta.env.DEV ? 'http://localhost:3000' : window.location.origin);
 
 export type OpponentStatus = 'connected' | 'disconnected';
 export type RematchState = 'idle' | 'requested-by-me' | 'requested-by-opponent';

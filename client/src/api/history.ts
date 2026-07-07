@@ -10,7 +10,11 @@ export interface HistoryEntry {
   completedAt: string;
 }
 
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000';
+// Same-origin by default in production so requests hit the Vercel rewrite (vercel.json)
+// instead of the cross-site duckdns origin directly.
+const API_URL =
+  (import.meta.env.VITE_API_URL as string | undefined) ??
+  (import.meta.env.DEV ? 'http://localhost:3000' : window.location.origin);
 
 export async function getHistory(modeFilter?: GameMode): Promise<HistoryEntry[]> {
   const url = new URL(`${API_URL}/api/games/history`);

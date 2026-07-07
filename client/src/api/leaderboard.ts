@@ -10,7 +10,12 @@ export interface LeaderboardEntry {
   winRate: number;
 }
 
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000';
+// Same-origin by default in production so requests hit the Vercel rewrite (vercel.json)
+// instead of the cross-site duckdns origin directly — see docs/runbook.md for why
+// cross-site cookies fail on mobile Safari/Chrome even with SameSite=None; Secure.
+const API_URL =
+  (import.meta.env.VITE_API_URL as string | undefined) ??
+  (import.meta.env.DEV ? 'http://localhost:3000' : window.location.origin);
 
 export async function getGlobalLeaderboard(): Promise<LeaderboardEntry[]> {
   const res = await fetch(`${API_URL}/api/leaderboard/global`, { credentials: 'include' });
