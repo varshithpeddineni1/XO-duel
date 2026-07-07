@@ -1,5 +1,5 @@
+import { AppHeader } from '../components/AppHeader.js';
 import { ModeButton } from '../components/ModeButton.js';
-import { ThemeToggle } from '../components/ThemeToggle.js';
 import type { Theme } from '../theme/index.js';
 
 interface HomeProps {
@@ -10,9 +10,6 @@ interface HomeProps {
   onSelectOnline: () => void;
 }
 
-// Home is the only screen with the logo header + theme toggle so far — history,
-// leaderboard, and account (the mockup's other `showLogoHeader` screens) don't exist yet
-// (Phase 4/5), so there's no BottomNav to switch between them either.
 export function Home({
   theme,
   onToggleTheme,
@@ -22,40 +19,7 @@ export function Home({
 }: HomeProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '16px 20px',
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
-            style={{
-              width: '34px',
-              height: '34px',
-              borderRadius: '10px',
-              background: 'var(--surface-raised)',
-              border: '1px solid var(--border)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontFamily: 'var(--font-display)',
-              fontWeight: 700,
-              fontSize: '15px',
-            }}
-          >
-            <span style={{ color: 'var(--x-color)' }}>X</span>
-            <span style={{ color: 'var(--o-color)' }}>O</span>
-          </div>
-          <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '16px' }}>
-            XO Duel
-          </div>
-        </div>
-        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-      </header>
+      <AppHeader theme={theme} onToggleTheme={onToggleTheme} />
 
       <div
         style={{

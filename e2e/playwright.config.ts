@@ -27,6 +27,7 @@ export default defineConfig({
         // Short enough that the disconnect/forfeit e2e test doesn't wait out the real 30s
         // production default.
         DISCONNECT_GRACE_PERIOD_MS: '2000',
+        SESSION_SECRET: 'e2e-session-secret-not-for-production',
       },
     },
     {

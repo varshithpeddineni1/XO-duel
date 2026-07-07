@@ -9,16 +9,20 @@ import { Server as SocketIoServer } from 'socket.io';
 import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
+import { createSessionMiddleware } from './middleware/session.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { openApiDocument } from './openapi.js';
+import { authRouter } from './routes/auth.js';
 import { gamesRouter } from './routes/games.js';
+import { meRouter, sessionRouter } from './routes/session.js';
 import { registerGameSockets } from './sockets/gameSocket.js';
 
 export function createApp() {
   const app = express();
 
-  app.use(cors({ origin: env.clientOrigin }));
+  app.use(cors({ origin: env.clientOrigin, credentials: true }));
   app.use(express.json());
+  app.use(createSessionMiddleware());
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok' });
@@ -29,6 +33,9 @@ export function createApp() {
     app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
   }
 
+  app.use('/api/session', sessionRouter);
+  app.use('/api/me', meRouter);
+  app.use('/api/auth', authRouter);
   app.use('/api/games', gamesRouter);
 
   app.use(errorHandler);

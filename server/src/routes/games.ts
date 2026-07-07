@@ -40,7 +40,10 @@ gamesRouter.post(
   createGameLimiter,
   asyncHandler(async (req, res) => {
     const input = createGameSchema.parse(req.body);
-    const game = input.mode === 'online' ? await createOnlineGame() : await createGame(input);
+    const game =
+      input.mode === 'online'
+        ? await createOnlineGame()
+        : await createGame(input, req.session.playerId ?? null);
     res.status(201).json(game);
   }),
 );

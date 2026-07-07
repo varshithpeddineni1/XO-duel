@@ -5,12 +5,13 @@ const gameStateSchema = {
   type: 'object',
   properties: {
     id: { type: 'integer' },
-    mode: { type: 'string', enum: ['local', 'ai'] },
+    mode: { type: 'string', enum: ['local', 'ai', 'online'] },
     aiDifficulty: {
       type: 'string',
       enum: ['easy', 'medium', 'hard', 'impossible'],
       nullable: true,
     },
+    inviteCode: { type: 'string', nullable: true },
     board: {
       type: 'array',
       items: { type: 'string', enum: ['X', 'O'], nullable: true },
@@ -18,7 +19,7 @@ const gameStateSchema = {
       maxItems: 9,
     },
     currentPlayer: { type: 'string', enum: ['X', 'O'] },
-    status: { type: 'string', enum: ['in_progress', 'complete'] },
+    status: { type: 'string', enum: ['waiting', 'in_progress', 'complete', 'abandoned'] },
     winner: { type: 'string', enum: ['X', 'O', 'draw'], nullable: true },
     winLine: {
       type: 'array',
@@ -41,14 +42,132 @@ const errorSchema = {
   },
 };
 
+const playerStateSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'integer' },
+    nickname: { type: 'string' },
+    username: { type: 'string', nullable: true },
+    isRegistered: { type: 'boolean' },
+    stats: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        wins: { type: 'integer' },
+        losses: { type: 'integer' },
+        draws: { type: 'integer' },
+      },
+    },
+  },
+};
+
 export const openApiDocument = {
   openapi: '3.0.3',
   info: {
     title: 'XO Duel API',
     version: '0.1.0',
-    description: 'Phase 2: local 2-player and vs-AI game creation/play. No accounts yet.',
+    description:
+      'Local 2-player, vs-AI, and real-time online play; optional guest-to-registered accounts.',
   },
   paths: {
+    '/api/session': {
+      post: {
+        summary: 'Create or resume a guest session (no login required, API-7)',
+        responses: {
+          '200': {
+            description: 'Current player for this session (created if none existed yet)',
+            content: { 'application/json': { schema: playerStateSchema } },
+          },
+        },
+      },
+    },
+    '/api/me': {
+      get: {
+        summary: 'Current session player, guest or registered',
+        responses: {
+          '200': {
+            description: 'The current player, or null if no session has been established yet',
+            content: { 'application/json': { schema: playerStateSchema, nullable: true } },
+          },
+        },
+      },
+    },
+    '/api/auth/register': {
+      post: {
+        summary: "Upgrade this session's guest player to a registered account, in place",
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  username: { type: 'string', minLength: 3, maxLength: 20 },
+                  password: { type: 'string', minLength: 8 },
+                },
+                required: ['username', 'password'],
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Registered player',
+            content: { 'application/json': { schema: playerStateSchema } },
+          },
+          '400': {
+            description: 'Validation error',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+          '409': {
+            description: 'Username already taken, or this session is already registered',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+        },
+      },
+    },
+    '/api/auth/login': {
+      post: {
+        summary: 'Log in to a registered account (rate-limited, API-10)',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  username: { type: 'string' },
+                  password: { type: 'string' },
+                },
+                required: ['username', 'password'],
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Logged-in player',
+            content: { 'application/json': { schema: playerStateSchema } },
+          },
+          '401': {
+            description: 'Incorrect username or password',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+          '429': {
+            description: 'Too many login attempts',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+        },
+      },
+    },
+    '/api/auth/logout': {
+      post: {
+        summary: 'End the current session',
+        responses: {
+          '204': { description: 'Logged out' },
+        },
+      },
+    },
     '/api/health': {
       get: {
         summary: 'Health check',
@@ -66,7 +185,7 @@ export const openApiDocument = {
     },
     '/api/games': {
       post: {
-        summary: 'Create a local or vs-AI game',
+        summary: 'Create a local, vs-AI, or online game',
         requestBody: {
           required: true,
           content: {
@@ -84,6 +203,7 @@ export const openApiDocument = {
                       },
                     },
                   },
+                  { type: 'object', properties: { mode: { const: 'online' } } },
                 ],
               },
             },
@@ -96,6 +216,22 @@ export const openApiDocument = {
           },
           '400': {
             description: 'Validation error',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+        },
+      },
+    },
+    '/api/games/invite/{code}': {
+      get: {
+        summary: 'Look up an online game by its invite code',
+        parameters: [{ name: 'code', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          '200': {
+            description: 'Game state',
+            content: { 'application/json': { schema: gameStateSchema } },
+          },
+          '404': {
+            description: 'No game with that invite code',
             content: { 'application/json': { schema: errorSchema } },
           },
         },

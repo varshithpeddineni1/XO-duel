@@ -134,7 +134,12 @@ async function finalizeIfOver(
 
 type LocalOrAiInput = Extract<CreateGameInput, { mode: 'local' } | { mode: 'ai' }>;
 
-export async function createGame(input: LocalOrAiInput): Promise<GameState> {
+// playerId is attributed to the X seat only: local mode's "player 2" has no account by
+// design (spec), and AI mode's O seat is the AI, never a player row.
+export async function createGame(
+  input: LocalOrAiInput,
+  playerId: number | null = null,
+): Promise<GameState> {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
@@ -146,9 +151,10 @@ export async function createGame(input: LocalOrAiInput): Promise<GameState> {
     );
     const game = rows[0];
     if (!game) throw new Error('game insert returned no row');
-    await client.query("INSERT INTO game_players (game_id, mark) VALUES ($1, 'X'), ($1, 'O')", [
-      game.id,
-    ]);
+    await client.query(
+      `INSERT INTO game_players (game_id, mark, player_id) VALUES ($1, 'X', $2), ($1, 'O', NULL)`,
+      [game.id, playerId],
+    );
     await client.query('COMMIT');
     logger.info('game created', { gameId: game.id, mode: game.mode });
     return toGameState(game, []);

@@ -49,20 +49,23 @@ export async function createGame(input: CreateGameInput): Promise<GameState> {
   const res = await fetch(`${API_URL}/api/games`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', // session cookie, so local/AI games get attributed (Phase 4)
     body: JSON.stringify(input),
   });
   return parseGameResponse(res);
 }
 
 export async function getGame(id: number): Promise<GameState> {
-  const res = await fetch(`${API_URL}/api/games/${id}`);
+  const res = await fetch(`${API_URL}/api/games/${id}`, { credentials: 'include' });
   return parseGameResponse(res);
 }
 
 // Used to validate an invite code up front (e.g. a typo'd/stale join link) before opening
 // a socket connection — joining itself happens over the socket, not this REST read.
 export async function getGameByInviteCode(inviteCode: string): Promise<GameState> {
-  const res = await fetch(`${API_URL}/api/games/invite/${inviteCode}`);
+  const res = await fetch(`${API_URL}/api/games/invite/${inviteCode}`, {
+    credentials: 'include',
+  });
   return parseGameResponse(res);
 }
 
@@ -70,6 +73,7 @@ export async function submitMove(id: number, cell: number, mark: Mark): Promise<
   const res = await fetch(`${API_URL}/api/games/${id}/moves`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ cell, mark }),
   });
   return parseGameResponse(res);
