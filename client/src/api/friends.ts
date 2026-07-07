@@ -23,7 +23,11 @@ export class FriendsApiError extends Error {
   }
 }
 
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000';
+// Same-origin by default in production so requests hit the Vercel rewrite (vercel.json)
+// instead of the cross-site duckdns origin directly.
+const API_URL =
+  (import.meta.env.VITE_API_URL as string | undefined) ??
+  (import.meta.env.DEV ? 'http://localhost:3000' : window.location.origin);
 
 async function parseJsonResponse<T>(res: Response): Promise<T> {
   const body: unknown = await res.json();

@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://xoduel.duckdns.org/api/:path*" },
+    { "source": "/socket.io/:path*", "destination": "https://xoduel.duckdns.org/socket.io/:path*" }
+  ]
+}
