@@ -20,8 +20,26 @@ import { leaderboardRouter } from './routes/leaderboard.js';
 import { meRouter, sessionRouter } from './routes/session.js';
 import { registerGameSockets } from './sockets/gameSocket.js';
 
+// Nginx terminates TLS and proxies to this process over plain HTTP (deploy/nginx.conf), so
+// the actual socket Express sees is never "secure" on its own — without trusting the
+// proxy, Express treats every request as HTTP regardless of what the visitor's browser
+// actually used, and cookie.secure: true (session.ts) then silently refuses to set the
+// Set-Cookie header at all, since it doesn't believe the request is HTTPS. Exported
+// standalone so this is unit-tested directly, same as session.ts's cookieOptionsFor.
+export function shouldTrustProxy(nodeEnv: string): boolean {
+  return nodeEnv === 'production';
+}
+
 export function createApp(sessionMiddleware = createSessionMiddleware()) {
   const app = express();
+
+  // `1` trusts exactly one hop's X-Forwarded-* headers, matching this exact topology
+  // (Nginx on the same box, proxying directly to Node — deploy/nginx.conf's
+  // X-Forwarded-Proto is what this reads). Only set in production; there's no proxy in
+  // front of the dev server at all.
+  if (shouldTrustProxy(env.nodeEnv)) {
+    app.set('trust proxy', 1);
+  }
 
   app.use(cors({ origin: env.clientOrigin, credentials: true }));
   app.use(express.json());
