@@ -98,14 +98,27 @@ jobs:
       - run: npm run migrate
       - run: npm run migrate:down
 
-  e2e:
-    name: Playwright e2e
+  integration:
+    name: Integration tests (server + Postgres)
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # TODO(Phase 2+): once real screens/routes exist, this job will need the same
-    # postgres service container as migrate-check — the smoke spec only exercises the
-    # static client preview today, no server involved.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: xo_duel
+          POSTGRES_PASSWORD: xo_duel
+          POSTGRES_DB: xo_duel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://xo_duel:xo_duel@localhost:5432/xo_duel
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
@@ -113,6 +126,38 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
+      - run: npm run migrate
+      - run: npm run test:integration --workspace server
+
+  e2e:
+    name: Playwright e2e
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: xo_duel
+          POSTGRES_PASSWORD: xo_duel
+          POSTGRES_DB: xo_duel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://xo_duel:xo_duel@localhost:5432/xo_duel
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run migrate
       - run: npx playwright install --with-deps chromium
         working-directory: e2e
       - run: npm run test:e2e

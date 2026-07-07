@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveInitialTheme, toggleTheme } from './theme.js';
+import { resolveInitialTheme, toggleTheme } from './index.js';
 
 describe('resolveInitialTheme', () => {
   it('honors a persisted dark theme even if the OS prefers light', () => {
