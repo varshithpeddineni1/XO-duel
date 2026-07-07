@@ -3,10 +3,13 @@
 // (API-3: clear JSON shape, never leaking stack traces, SQL, or file paths).
 import { ZodError } from 'zod';
 import {
+  AlreadyRegisteredError,
   GameNotFoundError,
   GameNotInProgressError,
   GameNotJoinableError,
   IllegalMoveError,
+  InvalidCredentialsError,
+  UsernameTakenError,
 } from './errors.js';
 
 export interface ErrorResponse {
@@ -34,6 +37,15 @@ export function toErrorResponse(err: unknown): ErrorResponse {
   }
   if (err instanceof GameNotJoinableError) {
     return { status: 409, code: 'GAME_NOT_JOINABLE', message: err.message };
+  }
+  if (err instanceof UsernameTakenError) {
+    return { status: 409, code: 'USERNAME_TAKEN', message: err.message };
+  }
+  if (err instanceof AlreadyRegisteredError) {
+    return { status: 409, code: 'ALREADY_REGISTERED', message: err.message };
+  }
+  if (err instanceof InvalidCredentialsError) {
+    return { status: 401, code: 'INVALID_CREDENTIALS', message: err.message };
   }
   return { status: 500, code: 'INTERNAL_ERROR', message: 'Something went wrong.' };
 }

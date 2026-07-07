@@ -130,7 +130,36 @@ through create → join → full game → mutual rematch, and a separate disconn
 flow. As with Phase 2, I could not run the new integration suite or e2e spec locally (no
 Postgres/Docker in this environment) — CI is the real evidence.
 
-**Still stubbed / not started:** `HistoryRow`, `LeaderboardRow`, `BottomNav` (no
-history/leaderboard/account screens yet — Phase 4/5), accounts/auth, friends,
-leaderboards, and the admin dashboard. Next up per the suggested build order: Phase 4
-(accounts).
+**Phase 4 (accounts) landed.** Every visitor now gets a session (`express-session` +
+`connect-pg-simple`, against the `session` table migrated back in Phase 1 for exactly this):
+`POST /api/session` (creates or resumes a guest `players` row, no login required — API-7),
+`GET /api/me` (current player, `null` if no session yet). Registering is an in-place
+upgrade, not a new row: `POST /api/auth/register` (`username`/`password`, argon2 — SEC-1)
+sets `username`/`password_hash`/`is_registered` on the *same* row a guest already had,
+so anything already attributed to it is retained automatically. `POST /api/auth/login`
+(regenerates the session id first, to prevent session fixation) and `POST /api/auth/logout`
+round it out; login/register are both rate-limited tighter than game creation
+(`server/src/routes/auth.ts` — API-10). `POST /api/games` now attributes `game_players.
+player_id` to the human seat for local/AI modes via `req.session.playerId` — **online
+games still don't**, since that needs sharing the session middleware with the Socket.io
+layer, which is a real gap this phase left open (not one of its named deliverables, and
+not needed to prove guest→registered retention, which is provable via local/AI play alone).
+`server/src/services/playerService.ts` also computes aggregate win/loss/draw stats
+(`GROUP BY outcome` over `game_players`) — there is no per-game history endpoint or table
+yet, that's Phase 5's `HistoryRow`/`GET /api/games/history` job.
+
+Frontend: `AppHeader` (extracted from Home's old inline header, now shared with the new
+`Account` screen), `BottomNav` (Home + Account tabs only — History/Leaderboard tabs are
+added in Phase 5 once those destinations exist), `Login` (username/password/confirm,
+toggles between login and register), `Account` (guest-vs-registered status, W/D/L stat
+tiles once registered). `App.tsx` silently calls `POST /api/session` + `GET /api/me` once
+on mount to hydrate the current player. New Playwright spec `account.spec.ts`: guest plays
+a local game to a win, registers mid-session, confirms the *same* win count is retained
+(not reset to 0), logs out, logs back in with the same credentials. As with every phase so
+far, I could not run the new integration suite or e2e spec locally (no Postgres/Docker in
+this environment) — CI is the real evidence.
+
+**Still stubbed / not started:** `HistoryRow`, `LeaderboardRow` (no history/leaderboard
+screens yet), friends, leaderboards, the admin dashboard, and online-game player
+attribution (noted above). Next up per the suggested build order: Phase 5 (friends,
+leaderboards, admin dashboard).

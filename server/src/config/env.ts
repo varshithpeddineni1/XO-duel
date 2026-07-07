@@ -25,3 +25,7 @@ export const env = {
 export function requireDatabaseUrl(): string {
   return required('DATABASE_URL');
 }
+
+export function requireSessionSecret(): string {
+  return required('SESSION_SECRET');
+}

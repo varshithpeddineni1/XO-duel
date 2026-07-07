@@ -1,15 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
+import {
+  AuthApiError,
+  createOrResumeSession,
+  getCurrentPlayer,
+  login,
+  logout,
+  register,
+  type PlayerState,
+} from './api/auth.js';
 import { createGame, submitMove, type Difficulty, type GameState } from './api/games.js';
+import { BottomNav, type NavDestination } from './components/BottomNav.js';
+import { Account } from './pages/Account.js';
 import { Difficulty as DifficultyPage } from './pages/Difficulty.js';
 import { GameScreen } from './pages/GameScreen.js';
 import { Home } from './pages/Home.js';
+import { Login, type AuthMode } from './pages/Login.js';
 import { OnlineWaiting } from './pages/OnlineWaiting.js';
 import { Result } from './pages/Result.js';
 import { resolveInitialTheme, toggleTheme, THEME_STORAGE_KEY, type Theme } from './theme/index.js';
 import { useOnlineGame } from './hooks/useOnlineGame.js';
 
-type Screen = 'home' | 'difficulty' | 'online-waiting' | 'board' | 'result';
+type Screen = 'home' | 'difficulty' | 'online-waiting' | 'board' | 'result' | 'account' | 'login';
 type Mode = 'local' | 'ai' | 'online';
+const NAV_SCREENS: Screen[] = ['home', 'account'];
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -47,8 +60,31 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [onlineInviteCode, setOnlineInviteCode] = useState<string | null>(null);
   const scoredOnlineGameId = useRef<number | null>(null);
+  const [player, setPlayer] = useState<PlayerState | null>(null);
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const onlineGame = useOnlineGame(onlineInviteCode ?? '');
+
+  async function refreshPlayer() {
+    const current = await getCurrentPlayer();
+    setPlayer(current);
+  }
+
+  // Silently establishes (or resumes) a guest session on first load — no login required
+  // for any mode (API-7). Failure here (e.g. the API is unreachable) isn't fatal: the app
+  // still works, it just falls back to treating the current session as an unauthenticated
+  // guest (player stays null) rather than leaving an unhandled rejection.
+  useEffect(() => {
+    void (async () => {
+      try {
+        await createOrResumeSession();
+        await refreshPlayer();
+      } catch {
+        setPlayer(null);
+      }
+    })();
+  }, []);
 
   // A shared invite link (?join=CODE) skips Home entirely and jumps straight into joining.
   useEffect(() => {
@@ -188,6 +224,45 @@ export function App() {
     if (mode) void startGame(mode, difficultySelected);
   };
 
+  const handleNavigate = (destination: NavDestination) => setScreen(destination);
+
+  const handleGoLogin = () => {
+    setAuthMode('login');
+    setAuthError(null);
+    setScreen('login');
+  };
+
+  const handleGoRegister = () => {
+    setAuthMode('register');
+    setAuthError(null);
+    setScreen('login');
+  };
+
+  async function handleAuthSubmit(username: string, password: string) {
+    setAuthError(null);
+    try {
+      if (authMode === 'register') {
+        await register(username, password);
+      } else {
+        await login(username, password);
+      }
+      await refreshPlayer();
+      setScreen('account');
+    } catch (err) {
+      setAuthError(err instanceof AuthApiError ? err.message : 'Something went wrong.');
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await logout();
+      await createOrResumeSession(); // a guest session resumes immediately (API-7)
+      await refreshPlayer();
+    } catch {
+      setError('Could not log out — please try again.');
+    }
+  }
+
   const activeGame = mode === 'online' ? onlineGame.game : game;
   const opponentLabel =
     mode === 'local'
@@ -224,60 +299,88 @@ export function App() {
         </div>
       )}
 
-      {screen === 'home' && (
-        <Home
-          theme={theme}
-          onToggleTheme={handleToggleTheme}
-          onSelectLocal={() => void startGame('local', difficultySelected)}
-          onSelectAi={handleSelectAi}
-          onSelectOnline={() => void startOnlineGame()}
-        />
-      )}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {screen === 'home' && (
+          <Home
+            theme={theme}
+            onToggleTheme={handleToggleTheme}
+            onSelectLocal={() => void startGame('local', difficultySelected)}
+            onSelectAi={handleSelectAi}
+            onSelectOnline={() => void startOnlineGame()}
+          />
+        )}
 
-      {screen === 'difficulty' && (
-        <DifficultyPage
-          selected={difficultySelected}
-          onSelect={setDifficultySelected}
-          onStart={() => void startGame('ai', difficultySelected)}
-          onBack={() => setScreen('home')}
-        />
-      )}
+        {screen === 'difficulty' && (
+          <DifficultyPage
+            selected={difficultySelected}
+            onSelect={setDifficultySelected}
+            onStart={() => void startGame('ai', difficultySelected)}
+            onBack={() => setScreen('home')}
+          />
+        )}
 
-      {screen === 'online-waiting' && onlineInviteCode && (
-        <OnlineWaiting inviteCode={onlineInviteCode} onCancel={handleCancelOnlineWait} />
-      )}
+        {screen === 'online-waiting' && onlineInviteCode && (
+          <OnlineWaiting inviteCode={onlineInviteCode} onCancel={handleCancelOnlineWait} />
+        )}
 
-      {screen === 'board' && activeGame && (
-        <GameScreen
-          game={activeGame}
-          opponentLabel={opponentLabel}
-          scoreLeftLabel={scoreLeftLabel}
-          scoreRightLabel={scoreRightLabel}
-          scoreLeftValue={scoreX}
-          scoreDrawValue={scoreDraws}
-          scoreRightValue={scoreO}
-          onCellClick={(cell) => void handleCellClick(cell)}
-          onQuit={handleQuit}
-          role={mode === 'online' ? onlineGame.role : null}
-          opponentDisconnected={mode === 'online' && onlineGame.opponentStatus === 'disconnected'}
-        />
-      )}
+        {screen === 'board' && activeGame && (
+          <GameScreen
+            game={activeGame}
+            opponentLabel={opponentLabel}
+            scoreLeftLabel={scoreLeftLabel}
+            scoreRightLabel={scoreRightLabel}
+            scoreLeftValue={scoreX}
+            scoreDrawValue={scoreDraws}
+            scoreRightValue={scoreO}
+            onCellClick={(cell) => void handleCellClick(cell)}
+            onQuit={handleQuit}
+            role={mode === 'online' ? onlineGame.role : null}
+            opponentDisconnected={mode === 'online' && onlineGame.opponentStatus === 'disconnected'}
+          />
+        )}
 
-      {screen === 'result' && activeGame && mode && (
-        <Result
-          game={activeGame}
-          scoreLeftLabel={scoreLeftLabel}
-          scoreRightLabel={scoreRightLabel}
-          scoreLeftValue={scoreX}
-          scoreDrawValue={scoreDraws}
-          scoreRightValue={scoreO}
-          onRematch={handleRematch}
-          onHome={handleQuit}
-          role={mode === 'online' ? onlineGame.role : null}
-          rematchState={mode === 'online' ? onlineGame.rematchState : 'idle'}
-          onAcceptRematch={onlineGame.acceptRematch}
-          onDeclineRematch={onlineGame.declineRematch}
-        />
+        {screen === 'result' && activeGame && mode && (
+          <Result
+            game={activeGame}
+            scoreLeftLabel={scoreLeftLabel}
+            scoreRightLabel={scoreRightLabel}
+            scoreLeftValue={scoreX}
+            scoreDrawValue={scoreDraws}
+            scoreRightValue={scoreO}
+            onRematch={handleRematch}
+            onHome={handleQuit}
+            role={mode === 'online' ? onlineGame.role : null}
+            rematchState={mode === 'online' ? onlineGame.rematchState : 'idle'}
+            onAcceptRematch={onlineGame.acceptRematch}
+            onDeclineRematch={onlineGame.declineRematch}
+          />
+        )}
+
+        {screen === 'account' && (
+          <Account
+            theme={theme}
+            onToggleTheme={handleToggleTheme}
+            player={player}
+            onGoLogin={handleGoLogin}
+            onGoRegister={handleGoRegister}
+            onLogout={() => void handleLogout()}
+          />
+        )}
+
+        {screen === 'login' && (
+          <Login
+            mode={authMode}
+            error={authError}
+            onToggleMode={() => setAuthMode((m) => (m === 'login' ? 'register' : 'login'))}
+            onSubmit={(username, password) => void handleAuthSubmit(username, password)}
+            onContinueAsGuest={() => setScreen('account')}
+            onBack={() => setScreen('account')}
+          />
+        )}
+      </div>
+
+      {NAV_SCREENS.includes(screen) && (
+        <BottomNav active={screen as NavDestination} onNavigate={handleNavigate} />
       )}
     </div>
   );

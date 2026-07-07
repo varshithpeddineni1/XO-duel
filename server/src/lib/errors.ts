@@ -28,3 +28,27 @@ export class GameNotJoinableError extends Error {
     this.name = 'GameNotJoinableError';
   }
 }
+
+export class UsernameTakenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UsernameTakenError';
+  }
+}
+
+// This session's player row already has an account (SEC-3: register upgrades a guest row
+// exactly once, never a second time).
+export class AlreadyRegisteredError extends Error {
+  constructor() {
+    super('This session is already registered.');
+    this.name = 'AlreadyRegisteredError';
+  }
+}
+
+// Deliberately generic — never reveals whether the username exists (no enumeration).
+export class InvalidCredentialsError extends Error {
+  constructor() {
+    super('Incorrect username or password.');
+    this.name = 'InvalidCredentialsError';
+  }
+}

@@ -8,6 +8,10 @@ export default defineConfig({
     fileParallelism: false,
     // Short grace period so the disconnect/forfeit test doesn't wait out the real 30s
     // production default.
-    env: { NODE_ENV: 'test', DISCONNECT_GRACE_PERIOD_MS: '300' },
+    env: {
+      NODE_ENV: 'test',
+      DISCONNECT_GRACE_PERIOD_MS: '300',
+      SESSION_SECRET: 'test-session-secret-not-for-production',
+    },
   },
 });
