@@ -333,7 +333,11 @@ export function App() {
   return (
     <div
       style={{
-        height: '100vh',
+        // dvh (not vh) tracks the browser's actual visible viewport as chrome (address bar,
+        // etc.) shows/hides — vh is fixed to the largest possible viewport, so on mobile the
+        // shell renders taller than what's currently visible and the bottom nav sits below
+        // the fold until the page is scrolled and the chrome collapses.
+        height: '100dvh',
         maxWidth: '480px',
         margin: '0 auto',
         display: 'flex',
