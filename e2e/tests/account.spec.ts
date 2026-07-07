@@ -30,7 +30,7 @@ test('guest play, register mid-session, stats retained, log out, log back in', a
   await page.getByRole('button', { name: 'Create Account' }).click();
 
   await page.getByPlaceholder('Username').fill(username);
-  await page.getByPlaceholder('Password').fill(password);
+  await page.getByPlaceholder('Password', { exact: true }).fill(password);
   await page.getByPlaceholder('Confirm password').fill(password);
   await page.getByRole('button', { name: 'Create Account' }).click();
 
@@ -48,7 +48,7 @@ test('guest play, register mid-session, stats retained, log out, log back in', a
   // Log back in with the same credentials — the account (and its stats) is still there.
   await page.getByRole('button', { name: 'Log In' }).click();
   await page.getByPlaceholder('Username').fill(username);
-  await page.getByPlaceholder('Password').fill(password);
+  await page.getByPlaceholder('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Log In' }).click();
 
   await expect(page.getByText('Signed in')).toBeVisible();
