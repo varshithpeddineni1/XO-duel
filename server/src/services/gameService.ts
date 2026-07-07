@@ -234,7 +234,11 @@ async function generateUniqueInviteCode(client: PoolClient): Promise<string> {
   throw new Error(`failed to generate a unique invite code after ${maxAttempts} attempts`);
 }
 
-export async function createOnlineGame(): Promise<GameState> {
+// playerId is the creator's — attributed to the X seat so a subsequent online game
+// between two registered accounts is leaderboard-eligible (API-9, DB-7). Sourced from
+// req.session.playerId over REST at creation time (the joiner's comes later, over the
+// socket connection that shares this same session — see joinOnlineGame below).
+export async function createOnlineGame(playerId: number | null = null): Promise<GameState> {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
@@ -246,7 +250,10 @@ export async function createOnlineGame(): Promise<GameState> {
     );
     const game = rows[0];
     if (!game) throw new Error('game insert returned no row');
-    await client.query("INSERT INTO game_players (game_id, mark) VALUES ($1, 'X')", [game.id]);
+    await client.query("INSERT INTO game_players (game_id, mark, player_id) VALUES ($1, 'X', $2)", [
+      game.id,
+      playerId,
+    ]);
     await client.query('COMMIT');
     logger.info('online game created', { gameId: game.id, inviteCode });
     return toGameState(game, []);
@@ -259,8 +266,12 @@ export async function createOnlineGame(): Promise<GameState> {
 }
 
 // Both players already share a live socket connection (mutual-accept rematch) — skip the
-// 'waiting' state entirely and seat both marks immediately.
-export async function createRematchGame(): Promise<GameState> {
+// 'waiting' state entirely and seat both marks immediately. playerIdX/playerIdO come from
+// each socket's own session (gameSocket.ts), preserving whichever mark was already theirs.
+export async function createRematchGame(
+  playerIdX: number | null,
+  playerIdO: number | null,
+): Promise<GameState> {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
@@ -272,9 +283,10 @@ export async function createRematchGame(): Promise<GameState> {
     );
     const game = rows[0];
     if (!game) throw new Error('game insert returned no row');
-    await client.query("INSERT INTO game_players (game_id, mark) VALUES ($1, 'X'), ($1, 'O')", [
-      game.id,
-    ]);
+    await client.query(
+      `INSERT INTO game_players (game_id, mark, player_id) VALUES ($1, 'X', $2), ($1, 'O', $3)`,
+      [game.id, playerIdX, playerIdO],
+    );
     await client.query('COMMIT');
     logger.info('online rematch game created', { gameId: game.id });
     return toGameState(game, []);
@@ -294,7 +306,10 @@ export async function findGameByInviteCode(inviteCode: string): Promise<GameStat
 }
 
 // Second player joining via the invite link (API-5: single-use once two players are in).
-export async function joinOnlineGame(inviteCode: string): Promise<GameState> {
+export async function joinOnlineGame(
+  inviteCode: string,
+  playerId: number | null = null,
+): Promise<GameState> {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
@@ -308,7 +323,10 @@ export async function joinOnlineGame(inviteCode: string): Promise<GameState> {
       throw new GameNotJoinableError(inviteCode);
     }
 
-    await client.query("INSERT INTO game_players (game_id, mark) VALUES ($1, 'O')", [game.id]);
+    await client.query("INSERT INTO game_players (game_id, mark, player_id) VALUES ($1, 'O', $2)", [
+      game.id,
+      playerId,
+    ]);
     await client.query("UPDATE games SET status = 'in_progress' WHERE id = $1", [game.id]);
     await client.query('COMMIT');
     logger.info('online game joined', { gameId: game.id });

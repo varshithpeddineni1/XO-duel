@@ -52,3 +52,54 @@ export class InvalidCredentialsError extends Error {
     this.name = 'InvalidCredentialsError';
   }
 }
+
+// History, leaderboards, and friends are registered-account features (API-9) — a guest
+// session is authenticated (it has a player row) but isn't eligible for these.
+export class RegistrationRequiredError extends Error {
+  constructor() {
+    super('You need a registered account for this.');
+    this.name = 'RegistrationRequiredError';
+  }
+}
+
+export class AdminAuthRequiredError extends Error {
+  constructor() {
+    super('Admin sign-in required.');
+    this.name = 'AdminAuthRequiredError';
+  }
+}
+
+export class CannotFriendSelfError extends Error {
+  constructor() {
+    super("You can't friend yourself.");
+    this.name = 'CannotFriendSelfError';
+  }
+}
+
+export class AlreadyFriendsError extends Error {
+  constructor() {
+    super('You are already friends.');
+    this.name = 'AlreadyFriendsError';
+  }
+}
+
+export class FriendRequestNotFoundError extends Error {
+  constructor() {
+    super('No pending friend request found.');
+    this.name = 'FriendRequestNotFoundError';
+  }
+}
+
+export class InvalidInviteCodeError extends Error {
+  constructor() {
+    super('That invite link is not valid.');
+    this.name = 'InvalidInviteCodeError';
+  }
+}
+
+export class PlayerNotFoundError extends Error {
+  constructor(username: string) {
+    super(`No registered player found with username "${username}".`);
+    this.name = 'PlayerNotFoundError';
+  }
+}

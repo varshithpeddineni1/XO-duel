@@ -10,6 +10,7 @@ interface AccountProps {
   onGoLogin: () => void;
   onGoRegister: () => void;
   onLogout: () => void;
+  onGoAdmin: () => void;
 }
 
 export function Account({
@@ -19,6 +20,7 @@ export function Account({
   onGoLogin,
   onGoRegister,
   onLogout,
+  onGoAdmin,
 }: AccountProps) {
   const displayName = player?.username ?? player?.nickname ?? 'Guest';
   const accountInitial = displayName.charAt(0).toUpperCase();
@@ -142,6 +144,20 @@ export function Account({
             Log Out
           </button>
         )}
+
+        <div
+          onClick={onGoAdmin}
+          style={{
+            textAlign: 'center',
+            fontSize: '12.5px',
+            color: 'var(--fg-faint)',
+            fontWeight: 700,
+            cursor: 'pointer',
+            marginTop: '8px',
+          }}
+        >
+          Admin Dashboard
+        </div>
       </div>
     </div>
   );

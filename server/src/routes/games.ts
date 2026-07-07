@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import {
   createGameSchema,
   gameIdParamSchema,
+  gameModeSchema,
   inviteCodeSchema,
   makeMoveSchema,
 } from '../schemas/gameSchemas.js';
@@ -15,6 +16,8 @@ import {
   getGame,
   submitMove,
 } from '../services/gameService.js';
+import { getPlayerHistory } from '../services/historyService.js';
+import { requireRegisteredPlayer } from '../services/playerService.js';
 
 function asyncHandler(handler: (req: Request, res: Response) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -42,7 +45,7 @@ gamesRouter.post(
     const input = createGameSchema.parse(req.body);
     const game =
       input.mode === 'online'
-        ? await createOnlineGame()
+        ? await createOnlineGame(req.session.playerId ?? null)
         : await createGame(input, req.session.playerId ?? null);
     res.status(201).json(game);
   }),
@@ -54,6 +57,18 @@ gamesRouter.get(
     const code = inviteCodeSchema.parse(req.params.code);
     const game = await findGameByInviteCode(code);
     res.status(200).json(game);
+  }),
+);
+
+// Must come before '/:id' (below), or a request for /history would be swallowed as
+// gameIdParamSchema trying (and failing) to parse the literal string "history" as an id.
+gamesRouter.get(
+  '/history',
+  asyncHandler(async (req, res) => {
+    const player = await requireRegisteredPlayer(req.session.playerId);
+    const modeFilter = req.query.mode ? gameModeSchema.parse(req.query.mode) : undefined;
+    const history = await getPlayerHistory(player.id, modeFilter);
+    res.status(200).json(history);
   }),
 );
 

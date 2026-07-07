@@ -159,7 +159,63 @@ a local game to a win, registers mid-session, confirms the *same* win count is r
 far, I could not run the new integration suite or e2e spec locally (no Postgres/Docker in
 this environment) — CI is the real evidence.
 
-**Still stubbed / not started:** `HistoryRow`, `LeaderboardRow` (no history/leaderboard
-screens yet), friends, leaderboards, the admin dashboard, and online-game player
-attribution (noted above). Next up per the suggested build order: Phase 5 (friends,
-leaderboards, admin dashboard).
+**Phase 5 (friends, leaderboards, history, admin dashboard) landed.** Fixed a real gap
+Phase 4 had left open: online games never attributed `game_players.player_id` because a
+Socket.io connection didn't share the Express session. `server/src/index.ts`'s
+`createServer()` now creates one `express-session` instance and hands it to *both*
+`createApp()` and `io.engine.use(sessionMiddleware)`, so `socket.request.session` (cast
+through `express.Request` — `@types/express-session` augments `Express.Request`, not
+`http.IncomingMessage`, which is what `socket.request` is actually typed as) sees the same
+identity a REST call from that browser tab would. `createOnlineGame`/`joinOnlineGame`/
+`createRematchGame` all take the resulting player id now — without this, the leaderboard
+below would have stayed permanently empty for every online game.
+
+- **History**: `GET /api/games/history` (mode-filterable), registered-only by construction
+  (`requireRegisteredPlayer` — there's no stable id to query a guest's history by, so
+  API-9's "no persistent history for a guest" isn't a special case, just a natural
+  consequence). `client/src/pages/History.tsx` — filter pills, win/loss/draw result badges.
+- **Leaderboards**: `GET /api/leaderboard/global`, `GET /api/friends/leaderboard` — derived
+  on read (DB-7) from `game_players`, scoped to `mode = 'online'` games where *neither*
+  seat is null (API-9: excludes local/AI by the mode filter, excludes any game with a guest
+  on either side by construction). **Ranking formula (was an open spec decision): win
+  rate, minimum 5 qualifying games** — below that a player just doesn't appear yet.
+  `client/src/pages/Leaderboard.tsx` — Friends/Global tabs, rank coloring, "isMe"
+  highlighting.
+- **Friends**: `server/src/services/friendService.ts` — search, request/accept/decline,
+  and a permanent personal invite code (`players.invite_code`, generated at registration,
+  `FR-` prefix so it can't be confused with a game's `XO-` code) for one-step instant-accept
+  invites. The `friendships` table's unique constraint only covers the *ordered*
+  (requester, addressee) pair, so `sendFriendRequest` checks both orderings itself — a
+  mutual request (both sides ask each other) auto-accepts instead of creating a duplicate
+  row. No dedicated Friends screen existed in the mockup to adapt — `client/src/pages/
+  Friends.tsx` (search, pending requests, invite-link sharing) was designed from scratch,
+  reachable from the Leaderboard's Friends tab, not a new BottomNav destination.
+- **Admin dashboard**: real auth (`server/src/routes/admin.ts`, `req.session.isAdmin`,
+  `requireAdmin` middleware) — replaces the mockup's hardcoded client-side check entirely,
+  reused none of it (SEC-2, SEC-10 — read-only, no mutation routes exist).
+  `GET /api/admin/stats` reads `events` for the genuinely historical metrics (games over
+  the last 7 days, outcome distribution — OBS-3) but reads `players`/`games` directly for
+  the two current-state snapshots (active players, games in progress) rather than trying
+  to reconstruct live state from an event log. `GET /api/admin/players` lists everyone,
+  guest and registered. Frontend `AdminLogin`/`AdminDashboard` also have no mockup
+  reference for the stats layout or the players table (the mockup's tiles didn't match
+  OBS-3's actual required metrics) — built from the spec/rule text directly, linked from a
+  small entry point on the Account screen, not a BottomNav tab.
+- `BottomNav` gained its final two tabs, **History** and **Ranks** (the label the mockup
+  actually uses for the leaderboard tab) — this is the point where Phase 3/4's "only Home +
+  Account for now, the rest wait for their destinations to exist" comment resolves itself.
+- Tests: unit (win-rate math via the schema/service layer, `FR-` invite code format);
+  integration suites for history filtering, leaderboard scoping (confirms local/AI and
+  guest-side games never appear, confirms the min-games threshold), the full friend
+  lifecycle (search → request → accept/decline, mutual-request auto-accept, invite-link
+  accept), and admin auth (every `/api/admin/*` route 401s without a session, 200s with
+  one). `leaderboard.integration.test.ts` and the new e2e `leaderboard.spec.ts` both play
+  actual Socket.io games (5 of them, to clear the ranking threshold) rather than mocking
+  game data, so they also exercise the session-sharing fix above end to end. New
+  `admin.spec.ts`. As with every phase so far, I could not run the integration suites or
+  e2e specs locally (no Postgres/Docker in this environment) — CI is the real evidence.
+
+**Still stubbed / not started:** nothing from the spec's core v1 feature list — Phase 6
+(deploy) is what's left. Two known, deliberately-scoped-out items remain: no admin
+moderation (suspend/ban — explicitly a future phase per SEC-10), and no nickname-editing
+UI for guests. Next up per the suggested build order: Phase 6 (deploy).

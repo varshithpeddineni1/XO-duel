@@ -174,3 +174,48 @@ describe('POST /api/games/:id/moves — ai mode', () => {
     expect(state.winner).not.toBe('X');
   });
 });
+
+describe('GET /api/games/history', () => {
+  it('requires a registered account (API-9)', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/session').send({}); // guest only, never registered
+    const res = await agent.get('/api/games/history');
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('REGISTRATION_REQUIRED');
+  });
+
+  it('lists completed games for the registered player, filterable by mode', async () => {
+    const agent = request.agent(app);
+    const guest = await agent.post('/api/session').send({});
+    await agent
+      .post('/api/auth/register')
+      .send({ username: `historytest_${guest.body.id}`, password: 'longenough' });
+
+    const localGame = await agent.post('/api/games').send({ mode: 'local' });
+    const localMoves: Array<{ cell: number; mark: Mark }> = [
+      { cell: 0, mark: 'X' },
+      { cell: 3, mark: 'O' },
+      { cell: 1, mark: 'X' },
+      { cell: 4, mark: 'O' },
+      { cell: 2, mark: 'X' },
+    ];
+    for (const move of localMoves) {
+      await agent.post(`/api/games/${localGame.body.id}/moves`).send(move);
+    }
+
+    const aiGame = await agent.post('/api/games').send({ mode: 'ai', aiDifficulty: 'easy' });
+    await agent.post(`/api/games/${aiGame.body.id}/moves`).send({ cell: 0, mark: 'X' });
+
+    const all = await agent.get('/api/games/history');
+    expect(all.status).toBe(200);
+    const gameIds = (all.body as Array<{ gameId: number }>).map((e) => e.gameId);
+    expect(gameIds).toContain(localGame.body.id);
+
+    const localOnly = await agent.get('/api/games/history').query({ mode: 'local' });
+    expect(localOnly.body.every((e: { mode: string }) => e.mode === 'local')).toBe(true);
+    const localEntry = localOnly.body.find(
+      (e: { gameId: number }) => e.gameId === localGame.body.id,
+    );
+    expect(localEntry).toMatchObject({ mode: 'local', opponentLabel: 'Player 2', outcome: 'win' });
+  });
+});

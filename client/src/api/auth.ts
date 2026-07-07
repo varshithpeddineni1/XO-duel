@@ -12,6 +12,7 @@ export interface PlayerState {
   nickname: string;
   username: string | null;
   isRegistered: boolean;
+  inviteCode: string | null;
   stats: PlayerStats | null;
 }
 

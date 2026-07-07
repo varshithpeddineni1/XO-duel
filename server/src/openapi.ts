@@ -49,6 +49,7 @@ const playerStateSchema = {
     nickname: { type: 'string' },
     username: { type: 'string', nullable: true },
     isRegistered: { type: 'boolean' },
+    inviteCode: { type: 'string', nullable: true },
     stats: {
       type: 'object',
       nullable: true,
@@ -58,6 +59,82 @@ const playerStateSchema = {
         draws: { type: 'integer' },
       },
     },
+  },
+};
+
+const historyEntrySchema = {
+  type: 'object',
+  properties: {
+    gameId: { type: 'integer' },
+    mode: { type: 'string', enum: ['local', 'ai', 'online'] },
+    opponentLabel: { type: 'string' },
+    outcome: { type: 'string', enum: ['win', 'loss', 'draw'] },
+    completedAt: { type: 'string', format: 'date-time' },
+  },
+};
+
+const leaderboardEntrySchema = {
+  type: 'object',
+  properties: {
+    playerId: { type: 'integer' },
+    displayName: { type: 'string' },
+    wins: { type: 'integer' },
+    losses: { type: 'integer' },
+    draws: { type: 'integer' },
+    gamesPlayed: { type: 'integer' },
+    winRate: { type: 'number' },
+  },
+};
+
+const friendSummarySchema = {
+  type: 'object',
+  properties: {
+    playerId: { type: 'integer' },
+    displayName: { type: 'string' },
+  },
+};
+
+const pendingRequestSchema = {
+  type: 'object',
+  properties: {
+    requestId: { type: 'integer' },
+    direction: { type: 'string', enum: ['incoming', 'outgoing'] },
+    playerId: { type: 'integer' },
+    displayName: { type: 'string' },
+    createdAt: { type: 'string', format: 'date-time' },
+  },
+};
+
+const adminStatsSchema = {
+  type: 'object',
+  properties: {
+    activePlayers: { type: 'integer' },
+    gamesInProgress: { type: 'integer' },
+    gamesOverTime: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { date: { type: 'string', format: 'date' }, count: { type: 'integer' } },
+      },
+    },
+    outcomeDistribution: {
+      type: 'object',
+      properties: {
+        xWins: { type: 'integer' },
+        oWins: { type: 'integer' },
+        draws: { type: 'integer' },
+      },
+    },
+  },
+};
+
+const adminPlayerSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'integer' },
+    displayName: { type: 'string' },
+    isRegistered: { type: 'boolean' },
+    lastSeenAt: { type: 'string', format: 'date-time' },
   },
 };
 
@@ -288,6 +365,243 @@ export const openApiDocument = {
           },
           '409': {
             description: 'Game is not in progress',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+        },
+      },
+    },
+    '/api/games/history': {
+      get: {
+        summary: "The current (registered) player's completed games",
+        parameters: [
+          {
+            name: 'mode',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['local', 'ai', 'online'] },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Completed games, most recent first',
+            content: {
+              'application/json': { schema: { type: 'array', items: historyEntrySchema } },
+            },
+          },
+          '403': {
+            description: 'Registration required',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+        },
+      },
+    },
+    '/api/leaderboard/global': {
+      get: {
+        summary:
+          'Global leaderboard — online games between two registered players only, min. 5 games, ranked by win rate (API-9, DB-7)',
+        responses: {
+          '200': {
+            description: 'Ranked leaderboard entries',
+            content: {
+              'application/json': { schema: { type: 'array', items: leaderboardEntrySchema } },
+            },
+          },
+        },
+      },
+    },
+    '/api/friends': {
+      get: {
+        summary: 'Accepted friends',
+        responses: {
+          '200': {
+            description: 'Friends list',
+            content: {
+              'application/json': { schema: { type: 'array', items: friendSummarySchema } },
+            },
+          },
+          '403': {
+            description: 'Registration required',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+        },
+      },
+    },
+    '/api/friends/requests': {
+      get: {
+        summary: 'Pending friend requests, incoming and outgoing',
+        responses: {
+          '200': {
+            description: 'Pending requests',
+            content: {
+              'application/json': { schema: { type: 'array', items: pendingRequestSchema } },
+            },
+          },
+        },
+      },
+      post: {
+        summary: 'Send a friend request by username',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: { username: { type: 'string' } },
+                required: ['username'],
+              },
+            },
+          },
+        },
+        responses: {
+          '204': { description: 'Request sent (or, if mutual, instantly accepted)' },
+          '400': {
+            description: "Can't friend yourself",
+            content: { 'application/json': { schema: errorSchema } },
+          },
+          '404': {
+            description: 'No registered player with that username',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+          '409': {
+            description: 'Already friends',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+        },
+      },
+    },
+    '/api/friends/requests/{id}/accept': {
+      post: {
+        summary: 'Accept a pending friend request',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: {
+          '204': { description: 'Accepted' },
+          '404': {
+            description: 'No pending request found',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+        },
+      },
+    },
+    '/api/friends/requests/{id}/decline': {
+      post: {
+        summary: 'Decline a pending friend request (deletes it — the pair can re-request later)',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: {
+          '204': { description: 'Declined' },
+          '404': {
+            description: 'No pending request found',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+        },
+      },
+    },
+    '/api/friends/search': {
+      get: {
+        summary: 'Search registered players by username prefix',
+        parameters: [{ name: 'q', in: 'query', required: true, schema: { type: 'string' } }],
+        responses: {
+          '200': {
+            description: 'Matching players',
+            content: {
+              'application/json': { schema: { type: 'array', items: friendSummarySchema } },
+            },
+          },
+        },
+      },
+    },
+    '/api/friends/leaderboard': {
+      get: {
+        summary: 'Leaderboard scoped to me + my friends (same ranking rules as global)',
+        responses: {
+          '200': {
+            description: 'Ranked leaderboard entries',
+            content: {
+              'application/json': { schema: { type: 'array', items: leaderboardEntrySchema } },
+            },
+          },
+        },
+      },
+    },
+    '/api/friends/invite/{code}': {
+      post: {
+        summary:
+          "Accept a friend's personal invite link — reusable, instant accept, no separate request step (SEC-4)",
+        parameters: [{ name: 'code', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          '204': { description: 'Now friends' },
+          '400': {
+            description: "Can't friend yourself",
+            content: { 'application/json': { schema: errorSchema } },
+          },
+          '404': {
+            description: 'Invalid invite code',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+        },
+      },
+    },
+    '/api/admin/login': {
+      post: {
+        summary: 'Admin sign-in (single env-configured identity, rate-limited, API-10)',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: { username: { type: 'string' }, password: { type: 'string' } },
+                required: ['username', 'password'],
+              },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'Signed in' },
+          '401': {
+            description: 'Incorrect admin credentials',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+        },
+      },
+    },
+    '/api/admin/logout': {
+      post: {
+        summary: 'End the admin session',
+        responses: { '204': { description: 'Logged out' } },
+      },
+    },
+    '/api/admin/stats': {
+      get: {
+        summary:
+          'Active players, games in progress, games over the last 7 days, outcome distribution (OBS-3). Read-only (SEC-10).',
+        responses: {
+          '200': {
+            description: 'Dashboard stats',
+            content: { 'application/json': { schema: adminStatsSchema } },
+          },
+          '401': {
+            description: 'Admin sign-in required',
+            content: { 'application/json': { schema: errorSchema } },
+          },
+        },
+      },
+    },
+    '/api/admin/players': {
+      get: {
+        summary: 'List players, guest and registered, most recently active first',
+        parameters: [
+          { name: 'limit', in: 'query', required: false, schema: { type: 'integer' } },
+          { name: 'offset', in: 'query', required: false, schema: { type: 'integer' } },
+        ],
+        responses: {
+          '200': {
+            description: 'Players',
+            content: {
+              'application/json': { schema: { type: 'array', items: adminPlayerSchema } },
+            },
+          },
+          '401': {
+            description: 'Admin sign-in required',
             content: { 'application/json': { schema: errorSchema } },
           },
         },
