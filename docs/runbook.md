@@ -12,6 +12,8 @@ by hand.
 ```
 Browser
   ├─ https://xoduel.vercel.app       → Vercel (client/, static build)
+  │     REST (/api/*)                   rewritten same-origin to the VPS (client/vercel.json)
+  │     Socket.io (/socket.io/*)         connects directly to the VPS instead — see below
   └─ https://xoduel.duckdns.org      → Hetzner VPS (204.168.235.206), DuckDNS A record
                                           → Nginx (deploy/nginx.conf, TLS via a Let's
                                             Encrypt cert from Certbot, WS upgrade headers)
@@ -25,6 +27,31 @@ there's no proxy/CDN in front of the VPS here — DuckDNS just resolves the host
 straight to the origin IP, and Certbot's certificate is what visitors' browsers actually
 see. That also means no CDN-level DDoS/WAF layer, which is a fine, common tradeoff for a
 small project like this but worth knowing about.
+
+**Why REST and Socket.io take different paths to the same VPS.** The frontend
+(`xoduel.vercel.app`) and backend (`xoduel.duckdns.org`) are different registrable
+domains — genuinely cross-*site*, not just cross-origin. Mobile Safari/Chrome enforce
+cross-site cookie restrictions more strictly than desktop, so calling the duckdns origin
+directly from the browser meant the session cookie could complete a login but then fail
+to come back on the next request — "logged in, then immediately looks like a guest
+again," and only on mobile, which made it easy to miss in desktop-only testing.
+`client/vercel.json` rewrites `/api/*` to the VPS so REST calls are same-origin from the
+browser's perspective, sidestepping the cross-site cookie problem entirely. Socket.io
+can't use the same trick, though — Vercel's rewrite proxies plain HTTP fine but does not
+reliably proxy a WebSocket upgrade to an external destination (confirmed: the handshake
+gets a 404 through the rewrite), so `useOnlineGame.ts` connects sockets straight to
+`https://xoduel.duckdns.org`, bypassing Vercel entirely. The Socket.io server already has
+CORS configured for the Vercel origin (`index.ts`'s `cors: { origin: env.clientOrigin }`),
+so the direct cross-origin connection itself is fine.
+
+**Known limitation this reopens:** `gameSocket.ts`'s `socketPlayerId()` attributes
+`game_players.player_id` (for stats/history/leaderboard) from the session cookie, and that
+cookie may not reach the direct cross-site socket connection on some mobile browsers — the
+same restriction the rewrite fixes for REST. The game still plays and completes correctly
+either way (`playerId` is nullable throughout `gameService.ts`), but the result may not
+attribute to a mobile player's account. Not fixed — would need the socket to carry its own
+non-cookie identity (e.g. a signed token minted over the already-working REST session and
+passed in the handshake) instead of depending on the cookie.
 
 ## One-time setup
 
@@ -83,9 +110,14 @@ This only happens once, when standing the environment up for the first time.
 9. **First deploy.** `cd /opt/xo-duel && ./deploy/deploy.sh` (see below).
 10. **Vercel.** New Vercel project from this GitHub repo, Root Directory set to `client`,
     framework preset Vite (build command `npm run build`, output `dist`). No custom domain
-    needed — Vercel's own `xoduel.vercel.app` is the production URL. Set its
-    `VITE_API_URL`/`VITE_SOCKET_URL` environment variables to
-    `https://xoduel.duckdns.org`.
+    needed — Vercel's own `xoduel.vercel.app` is the production URL. **Leave
+    `VITE_API_URL`/`VITE_SOCKET_URL` unset** in the project's environment variables — the
+    client defaults to same-origin (routed through `client/vercel.json`'s rewrite) for REST
+    and directly to `https://xoduel.duckdns.org` for Socket.io. Setting `VITE_API_URL` to
+    the duckdns origin directly (an earlier iteration of this deploy did exactly that)
+    bypasses the rewrite and breaks session cookies on mobile Safari/Chrome — see
+    Troubleshooting. Only set these explicitly if intentionally pointing the client at a
+    different backend (e.g. a staging VPS).
 11. **Executable bits.** If cloned/deployed from a Windows-originated commit, the scripts'
     executable bit may not have survived (`git config core.filemode` is often `false` on
     Windows). Run `chmod +x deploy/*.sh` once on the VPS if `./deploy/deploy.sh` complains
@@ -163,3 +195,44 @@ tail -f /var/log/nginx/error.log
   actually has current files (`certbot certificates` lists expiry), and that
   `certbot renew --dry-run` succeeds — if renewal quietly broke, the cert eventually
   expires even though nothing else changed.
+- **Login works on desktop but shows as a guest on mobile:** classic cross-site cookie
+  issue (see "Why REST and Socket.io take different paths" above). Confirm the Vercel
+  project's `VITE_API_URL` is actually unset — if it's pointed at
+  `https://xoduel.duckdns.org` directly, REST calls bypass the same-origin rewrite and
+  mobile Safari/Chrome will drop the session cookie.
+- **A Vercel deploy doesn't seem to include a change that's definitely on `main`:** check
+  the Vercel project's Deployments tab is building the commit you expect — a deploy can
+  get stuck pointing at an old commit if auto-deploy-on-push isn't actually wired up for
+  that branch. Don't assume a `git push` alone means the live site updated; verify (e.g.
+  `curl https://xoduel.vercel.app/api/health` should reach `client/vercel.json`'s rewrite,
+  not 404).
+- **Online multiplayer sockets fail to connect only through the Vercel domain** (WS
+  handshake returns a 404), but work fine hitting `xoduel.duckdns.org` directly: expected,
+  not a bug — see the architecture note above. Sockets must connect straight to the VPS;
+  they were never meant to go through Vercel's rewrite.
+- **A shared invite link says "Game ... is not joinable" moments after creating it:**
+  check `WAITING_GAME_GRACE_PERIOD_MS` (`.env`, default 5 min) — a still-`waiting` invite
+  is abandoned this long after the creator's socket disconnects with nobody having joined
+  yet. Mobile browsers commonly suspend a backgrounded tab's WebSocket the instant the
+  user switches apps to actually send the link, so this needs to comfortably cover that
+  realistic workflow — it's deliberately separate from `DISCONNECT_GRACE_PERIOD_MS` (30s),
+  which is tuned for mid-game network blips where a live opponent is already waiting, not
+  for "give someone time to receive and open a link."
+- **A join or move silently does nothing** — socket connects fine, console is empty,
+  screen just doesn't update: check for an unsurfaced ack error first (inspect the WS
+  frames' ack payload). `App.tsx` surfaces `useOnlineGame`'s `error` in the same banner as
+  everything else, but this class of bug (a real failure with zero client-side feedback)
+  has happened here before — if it resurfaces, look for a new code path that captures an
+  error without ever rendering it, rather than assuming it's a connection problem.
+- **`trust proxy` / secure-cookie behavior looks wrong despite `.env` looking right:**
+  `deploy/ecosystem.config.cjs` hardcodes `NODE_ENV: 'production'` in PM2's `env` block,
+  which takes precedence over `.env` (whose own `.env.example` default is
+  `development` — easy to leave unedited on a fresh VPS). Don't just read `.env`; check
+  what the running process actually has: `pm2 env <id>` or `pm2 show xo-duel-server`.
+- **Reconnect-after-disconnect note for `useOnlineGame.ts`:** the stored reconnect token
+  must be re-read from `sessionStorage` *inside* the socket's `'connect'` handler, not
+  once when the effect mounts. `'connect'` fires again on every automatic socket.io
+  reconnect (e.g. a mobile browser resuming a backgrounded tab's dropped socket), and
+  reading the token once outside that handler previously meant every reconnect resent a
+  stale/empty value forever — reconnect only ever worked via an actual full page refresh.
+  Worth keeping in mind if this hook gets touched again.
