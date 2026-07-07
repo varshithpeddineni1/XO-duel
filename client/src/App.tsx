@@ -74,12 +74,17 @@ export function App() {
       return undefined;
     }
     if (state.status === 'complete' && scoredOnlineGameId.current !== state.id) {
+      // The ref guard (not a cleanup-cancelled timeout) is what makes this idempotent: a
+      // completed game is announced by both `move_made` and `game_over` in quick
+      // succession, each producing a new `game` object and re-running this effect. If the
+      // timeout were cancelled and rescheduled on that second run the way an effect
+      // cleanup normally would, the guard below would already be true by then and no
+      // timeout would ever fire — the result screen would never appear.
       scoredOnlineGameId.current = state.id;
       if (state.winner === 'X') setScoreX((s) => s + 1);
       else if (state.winner === 'O') setScoreO((s) => s + 1);
       else setScoreDraws((s) => s + 1);
-      const timeout = setTimeout(() => setScreen('result'), 500);
-      return () => clearTimeout(timeout);
+      setTimeout(() => setScreen('result'), 500);
     }
     return undefined;
   }, [onlineGame.game, onlineInviteCode]);
