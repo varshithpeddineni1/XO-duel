@@ -33,7 +33,7 @@ const loginLimiter = rateLimit({
 
 const registerLimiter = rateLimit({
   windowMs: 60_000,
-  limit: 5,
+  limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
 });
